@@ -1,0 +1,12 @@
+fps_settings:
+  - 0.2
+  - 0.4
+  - 5
+token_settings:
+  - 60
+  - 90
+  - 120
+num_samples: 1
+num_videos: 5
+hf_token: ""
+seed: 42
