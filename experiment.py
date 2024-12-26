@@ -30,7 +30,8 @@ for fps in config['fps_settings']:
             video_paths, 
             seconds_per_frame=fps,
             num_samples=config["num_samples"], 
-            hf_token=config["hf_token"] 
+            hf_token=config["hf_token"],
+            compile=config["compile"] 
         )
         
         print(f"Completed experiment for FPS={fps}, Token Limit={token_limit}")

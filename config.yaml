@@ -10,3 +10,4 @@ num_samples: 1
 num_videos: 5
 hf_token: ""
 seed: 42
+compile: False 

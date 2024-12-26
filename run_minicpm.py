@@ -18,7 +18,7 @@ LOG_FILE = "benchmark_log.txt"
 os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
 
 # Extracting parquet files
-def extract_videos_from_parquet(dataset_path, temp_video_dir, num_videos=None, seed=42):
+def extract_videos_from_parquet(dataset_path, temp_video_dir, num_videos, seed):
     video_paths = []
     parquet_files = [f for f in os.listdir(dataset_path) if f.endswith(".parquet")] 
 
@@ -104,7 +104,7 @@ def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
     return tokens_generated, queries, model_runtime, extra_runtime, peak_memory_opencv, peak_memory_inference
 
 
-def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token):
+def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, compile):
     model = AutoModel.from_pretrained(
         "openbmb/MiniCPM-V-2_6",
         trust_remote_code=True,
@@ -112,6 +112,9 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token):
         torch_dtype=torch.bfloat16,
         use_auth_token=hf_token
     ).eval().cuda()
+
+    if compile:
+        model = torch.compile(model)
 
     tokenizer = AutoTokenizer.from_pretrained(
         "openbmb/MiniCPM-V-2_6", trust_remote_code=True, use_auth_token=hf_token
@@ -205,7 +208,8 @@ if __name__ == "__main__":
         video_paths,
         seconds_per_frame=config["seconds_per_frame"], 
         num_samples=config["num_samples"], 
-        hf_token=config["hf_token"]
+        hf_token=config["hf_token"],
+        compile=config["compile"]
     )
 
     for video_path in video_paths:
