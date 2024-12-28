@@ -29,6 +29,7 @@ for fps in config['fps_settings']:
         benchmark_results = benchmark_videos(
             video_paths, 
             seconds_per_frame=fps,
+            token_limit=token_limit,
             num_samples=config["num_samples"], 
             hf_token=config["hf_token"],
             compile=config["compile"] 

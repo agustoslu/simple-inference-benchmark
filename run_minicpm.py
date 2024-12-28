@@ -38,7 +38,7 @@ def extract_videos_from_parquet(dataset_path, temp_video_dir, num_videos, seed):
     random_videos = random.sample(video_paths, num_videos)
     return random_videos
 
-def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
+def process_video(video_path, seconds_per_frame, token_limit, num_samples, model, tokenizer):
     cap = cv2.VideoCapture(video_path)
     original_fps = cap.get(cv2.CAP_PROP_FPS)
     frame_interval = max(1, int(original_fps * seconds_per_frame))  # Frames to skip
@@ -92,7 +92,7 @@ def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
     return tokens_generated, queries, model_runtime, extra_runtime
 
 
-def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, compile):
+def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, hf_token, compile):
     model = AutoModel.from_pretrained(
         "openbmb/MiniCPM-V-2_6",
         trust_remote_code=True,
@@ -128,7 +128,7 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")        
 
         tokens_generated, queries, model_runtime, extra_runtime = process_video(
-            video_path, seconds_per_frame, num_samples, model, tokenizer
+            video_path, seconds_per_frame, token_limit, num_samples, model, tokenizer
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -200,7 +200,8 @@ if __name__ == "__main__":
     print("Benchmarking videos...")
     benchmark_results = benchmark_videos(
         video_paths,
-        seconds_per_frame=config["seconds_per_frame"], 
+        seconds_per_frame=config["fps_settings"],
+        token_limit=config["token_settings"] 
         num_samples=config["num_samples"], 
         hf_token=config["hf_token"],
         compile=config["compile"]
