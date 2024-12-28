@@ -51,21 +51,14 @@ def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     progress_bar = tqdm(total=total_frames, desc=f"Processing {os.path.basename(video_path)}", unit="frame")
 
-    torch.cuda.reset_peak_memory_stats()
-    peak_memory_opencv = 0
-    peak_memory_inference = 0
-
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
         
-        opencv_start_memory = torch.cuda.memory_reserved() / 1e9
         if frame_count % frame_interval == 0:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame_pil = Image.fromarray(frame_rgb)
-            opencv_peak_memory = torch.cuda.max_memory_reserved() / 1e9
-            peak_memory_opencv = max(peak_memory_opencv, opencv_peak_memory - opencv_start_memory)
             
             # Prompt for generation
             question = "Describe this video in detail"
@@ -73,7 +66,6 @@ def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
 
             # Model inference
             start_model_time = time.time()
-            inference_start_memory = torch.cuda.memory_reserved() / 1e9
             
             try:
                 for _ in range(num_samples):
@@ -83,8 +75,6 @@ def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
                 print(f"Error processing frame {frame_count}: {e}")
                 res = ""
             model_runtime += time.time() - start_model_time
-            inference_peak_memory = torch.cuda.max_memory_reserved() / 1e9
-            peak_memory_inference = max(peak_memory_inference, inference_peak_memory - inference_start_memory)
 
             # Calculate time taken for additional operations
             start_extra_time = time.time()
@@ -99,9 +89,7 @@ def process_video(video_path, seconds_per_frame, num_samples, model, tokenizer):
     cap.release()
     progress_bar.close()
 
-    total_peak_memory = torch.cuda.max_memory_reserved() / 1e9
-
-    return tokens_generated, queries, model_runtime, extra_runtime, peak_memory_opencv, peak_memory_inference
+    return tokens_generated, queries, model_runtime, extra_runtime
 
 
 def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, compile):
@@ -132,17 +120,24 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
 
     for video_path in tqdm(video_paths, desc="Benchmarking videos"):
         print(f"\nProcessing: {video_path}")
+        #torch.cuda.reset_peak_memory_stats()
         start_time = time.time()
-        if video_path == video_paths[0]:
-            torch.cuda.reset_peak_memory_stats()
+        
+        initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
+        initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
+        print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")        
 
-        tokens_generated, queries, model_runtime, extra_runtime, peak_memory_opencv, peak_memory_inference = process_video(
+        tokens_generated, queries, model_runtime, extra_runtime = process_video(
             video_path, seconds_per_frame, num_samples, model, tokenizer
         )
-        current_peak_memory = torch.cuda.max_memory_allocated() / 1e9
-        global_peak_memory_allocated = max(global_peak_memory_allocated, current_peak_memory)
+        peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
+        peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
+        global_peak_memory_allocated = max(global_peak_memory_allocated, peak_memory_allocated)
+        global_peak_memory_reserved = max(global_peak_memory_reserved, peak_memory_reserved)
 
         video_runtime = time.time() - start_time
+
+        print(f"[{os.path.basename(video_path)}] Peak Memory - Allocated: {peak_memory_allocated:.3f} GB, Reserved: {peak_memory_reserved:.3f} GB")
 
         print(f"Finished {os.path.basename(video_path)}")
         print(f"  Total Runtime: {video_runtime:.2f}s")
@@ -150,17 +145,12 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
         print(f"  Extra Operations Runtime: {extra_runtime:.2f}s")
         print(f"  Tokens Generated: {tokens_generated}")
         print(f"  Queries Made: {queries}")
-        print(f"  Peak Memory (OpenCV): {peak_memory_opencv:.3f} GB")
-        print(f"  Peak Memory (Inference): {peak_memory_inference:.3f} GB")
-
+        
         total_runtime += video_runtime
         total_model_runtime += model_runtime
         total_extra_runtime += extra_runtime
         total_queries += queries
         total_tokens += tokens_generated
-        total_peak_memory_opencv = max(total_peak_memory_opencv, peak_memory_opencv)
-        total_peak_memory_inference = max(total_peak_memory_inference, peak_memory_inference)
-
 
         results.append({
             "video": video_path,
@@ -169,8 +159,8 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
             "extra_runtime": extra_runtime,
             "tokens": tokens_generated,
             "queries": queries,
-            "peak_memory_opencv": peak_memory_opencv,
-            "peak_memory_inference": peak_memory_inference,
+            "peak_memory_allocated": peak_memory_allocated,
+            "peak_memory_reserved": peak_memory_reserved,
         })
 
     qps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
@@ -182,9 +172,8 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
     print(f"  Queries per Second (QPS): {qps:.2f}")
     print(f"  Tokens per Second (TPS): {tps:.2f}")
     print(f"  Tokens per Query (TPQ): {tpq:.2f}")
-    print(f"  Total Peak Memory (OpenCV): {total_peak_memory_opencv:.3f} GB")
-    print(f"  Total Peak Memory (Inference): {total_peak_memory_inference:.3f} GB")
-    print(f"  Global Peak Memory Allocated (PyTorch): {global_peak_memory_allocated:.3f} GB")
+    print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
+    print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
 
     with open(LOG_FILE, "a") as log_file:
         log_file.write(f"Total Runtime: {total_runtime}\n")
@@ -193,9 +182,8 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
         log_file.write(f"QPS: {qps}\n")
         log_file.write(f"TPS: {tps}\n")
         log_file.write(f"TPQ: {tpq}\n")
-        log_file.write(f"Peak Memory (OpenCV): {total_peak_memory_opencv:.3f} GB\n")
-        log_file.write(f"Peak Memory (Inference): {total_peak_memory_inference:.3f} GB\n")
-        log_file.write(f"Global Peak Memory Allocated (PyTorch): {global_peak_memory_allocated:.3f} GB\n")
+        log_file.write(f"Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB\n")
+        log_file.write(f"Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB\n")
         log_file.write("\n")
 
     return results
