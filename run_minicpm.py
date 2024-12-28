@@ -11,8 +11,8 @@ from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
 # Data paths
-DATASET_PATH = "/dss/dsshome1/02/ra79vom2/dataset/FineVideo_20_Samples"
-TEMP_VIDEO_DIR = "/dss/dsshome1/02/ra79vom2/dataset/temp_videos"
+DATASET_PATH = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/FineVideo_20_Samples"
+TEMP_VIDEO_DIR = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/temp_videos"
 LOG_FILE = "benchmark_log.txt"
 
 os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
@@ -128,15 +128,19 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
     total_tokens = 0
     total_peak_memory_opencv = 0
     total_peak_memory_inference = 0
-
+    global_peak_memory_allocated = 0 
 
     for video_path in tqdm(video_paths, desc="Benchmarking videos"):
         print(f"\nProcessing: {video_path}")
         start_time = time.time()
+        if video_path == video_paths[0]:
+            torch.cuda.reset_peak_memory_stats()
 
         tokens_generated, queries, model_runtime, extra_runtime, peak_memory_opencv, peak_memory_inference = process_video(
             video_path, seconds_per_frame, num_samples, model, tokenizer
         )
+        current_peak_memory = torch.cuda.max_memory_allocated() / 1e9
+        global_peak_memory_allocated = max(global_peak_memory_allocated, current_peak_memory)
 
         video_runtime = time.time() - start_time
 
@@ -180,6 +184,7 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
     print(f"  Tokens per Query (TPQ): {tpq:.2f}")
     print(f"  Total Peak Memory (OpenCV): {total_peak_memory_opencv:.3f} GB")
     print(f"  Total Peak Memory (Inference): {total_peak_memory_inference:.3f} GB")
+    print(f"  Global Peak Memory Allocated (PyTorch): {global_peak_memory_allocated:.3f} GB")
 
     with open(LOG_FILE, "a") as log_file:
         log_file.write(f"Total Runtime: {total_runtime}\n")
@@ -190,6 +195,7 @@ def benchmark_videos(video_paths, seconds_per_frame, num_samples, hf_token, comp
         log_file.write(f"TPQ: {tpq}\n")
         log_file.write(f"Peak Memory (OpenCV): {total_peak_memory_opencv:.3f} GB\n")
         log_file.write(f"Peak Memory (Inference): {total_peak_memory_inference:.3f} GB\n")
+        log_file.write(f"Global Peak Memory Allocated (PyTorch): {global_peak_memory_allocated:.3f} GB\n")
         log_file.write("\n")
 
     return results
