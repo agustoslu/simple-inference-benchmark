@@ -120,8 +120,6 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
     total_extra_runtime = 0
     total_queries = 0
     total_tokens = 0
-    total_peak_memory_opencv = 0
-    total_peak_memory_inference = 0
     global_peak_memory_allocated = 0 
 
     for video_path in tqdm(video_paths, desc="Benchmarking videos"):
