@@ -69,11 +69,17 @@ def process_video(video_path, seconds_per_frame, token_limit, num_samples, model
             
             try:
                 for _ in range(num_samples):
-                    res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, sampling=False, stream=False)
+                    generation_config = {
+                        "max_new_tokens": token_limit, 
+                        "sampling": False,  
+                        "stream": False,  
+                    }
+                    res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
                     print(f"Generated Text for Frame {frame_count}: {res}")
             except Exception as e:
                 print(f"Error processing frame {frame_count}: {e}")
                 res = ""
+                
             model_runtime += time.time() - start_model_time
 
             # Calculate time taken for additional operations
