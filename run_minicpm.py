@@ -201,7 +201,7 @@ if __name__ == "__main__":
     benchmark_results = benchmark_videos(
         video_paths,
         seconds_per_frame=config["fps_settings"],
-        token_limit=config["token_settings"] 
+        token_limit=config["token_settings"], 
         num_samples=config["num_samples"], 
         hf_token=config["hf_token"],
         compile=config["compile"]
