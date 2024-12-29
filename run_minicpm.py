@@ -121,6 +121,7 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
     total_queries = 0
     total_tokens = 0
     global_peak_memory_allocated = 0 
+    global_peak_memory_reserved = 0
 
     for video_path in tqdm(video_paths, desc="Benchmarking videos"):
         print(f"\nProcessing: {video_path}")
