@@ -16,8 +16,8 @@ with open("config.yaml", "r") as config_file:
 
 # Experiment with 5 videos using the settings in the config file
 video_paths = extract_videos_from_parquet(
-    "/dss/dsshome1/02/ra79vom2/dataset/FineVideo_20_Samples", 
-    "/dss/dsshome1/02/ra79vom2/dataset/temp_videos", 
+    "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/FineVideo_20_Samples", 
+    "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/temp_videos", 
     num_videos=config['num_videos'],
     seed=config['seed']
 )
