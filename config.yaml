@@ -10,4 +10,5 @@ num_samples: 1
 num_videos: 5
 hf_token: ""
 seed: 42
-compile: False 
+compile: False # activate torch.compile()
+# avoid_cache: False (TODO: place some random characters into prompt to avoid cache)
