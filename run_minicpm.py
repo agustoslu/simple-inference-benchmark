@@ -41,6 +41,7 @@ def extract_videos_from_parquet(dataset_path, temp_video_dir, num_videos, seed):
 def process_video(video_path, seconds_per_frame, token_limit, num_samples, model, tokenizer):
     cap = cv2.VideoCapture(video_path)
     original_fps = cap.get(cv2.CAP_PROP_FPS)
+    seconds_per_frame_overwritten = 1 / second_per_frame # 1 / fps_setting value in the config
     frame_interval = max(1, int(original_fps * seconds_per_frame))  # Frames to skip
     frame_count = 0
     tokens_generated = 0
