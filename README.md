@@ -6,3 +6,14 @@ Benchmarking different runtimes for vision language models
 | ----------------------- | ----------- | ----- | ----- | ----- | ---------- |
 | MiniCPM                 | huggingface | ?     | ?     | ?     | ?          |
 | MiniCPM (model.compile) | huggingface | ?     | ?     | ?     | ?          |
+
+# Run the experiment
+download the dataset
+```bash
+python download.py
+```
+
+Run the experiment
+```bash
+python experiment.py
+```
