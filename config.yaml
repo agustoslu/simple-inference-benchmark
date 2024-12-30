@@ -9,7 +9,7 @@ token_settings:
   - 120
 num_samples: 1
 num_videos: 5
-hf_token: ""
+hf_token: !ENV ${HF_TOKEN}
 seed: 42
 compile: False # activate torch.compile()
 # avoid_cache: False (TODO: place some random characters into prompt to avoid cache)
