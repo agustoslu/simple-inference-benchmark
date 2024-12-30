@@ -9,6 +9,7 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
+from pyaml_env import parse_config
 
 # Data paths
 DATASET_PATH = "./simple-inference-benchmark/dataset/FineVideo_20_Samples"
@@ -195,8 +196,8 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
     return results
 
 if __name__ == "__main__":
-    with open("config.yaml", "r") as config_file:
-        config = yaml.safe_load(config_file)
+
+    config = parse_config("./config.yaml")
 
     print("Extracting videos from Parquet files...")
     video_paths = extract_videos_from_parquet(

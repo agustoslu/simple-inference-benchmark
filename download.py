@@ -1,7 +1,9 @@
 # when connected to server downloaded files might not be shown in the folder on the explorer panel
 # but still simple ls check will show that they are there
 import os
+from pyaml_env import parse_config
 
+config = parse_config("./config.yaml")
 output_folder = "./simple-inference-benchmark/dataset/FineVideo_20_Samples"
 os.makedirs(output_folder, exist_ok=True)
 
@@ -31,7 +33,7 @@ file_names = [
 ]
 
 
-access_token = ""
+access_token = config["hf_token"]
 
 for file_name in file_names:
     file_url = f"{base_url}{file_name}"

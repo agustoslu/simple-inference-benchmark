@@ -20,3 +20,6 @@ pyarrow
 fastparquet
 pandas
 opencv-python
+
+# env variable config file
+pyaml-env

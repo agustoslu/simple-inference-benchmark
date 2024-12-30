@@ -10,9 +10,11 @@ from PIL import Image
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 from run_minicpm import extract_videos_from_parquet, benchmark_videos, process_video
+from pyaml_env import parse_config
 
-with open("config.yaml", "r") as config_file:
-    config = yaml.safe_load(config_file)
+
+config = parse_config("./config.yaml")
+
 
 # Experiment with 5 videos using the settings in the config file
 video_paths = extract_videos_from_parquet(
