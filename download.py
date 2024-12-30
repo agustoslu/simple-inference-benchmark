@@ -2,7 +2,7 @@
 # but still simple ls check will show that they are there
 import os
 
-output_folder = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/FineVideo_20_Samples"
+output_folder = "./simple-inference-benchmark/dataset/FineVideo_20_Samples"
 os.makedirs(output_folder, exist_ok=True)
 
 base_url = "https://huggingface.co/datasets/HuggingFaceFV/finevideo/resolve/main/data/"
