@@ -1,6 +1,8 @@
 import os
+from pathlib import Path
 import time
 import random
+import duckdb
 import yaml
 import cv2
 import json
@@ -17,6 +19,24 @@ TEMP_VIDEO_DIR = "./simple-inference-benchmark/dataset/temp_videos"
 LOG_FILE = "benchmark_log.txt"
 
 os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
+
+def sample_n_videos(n: int, seed: int):
+    con = duckdb.connect()
+    n_videos = con.sql(f"SELECT COUNT(*) FROM '{DATASET_PATH}/*.parquet'").fetchone()[0]
+    print(f"Total videos: {n_videos}")
+    random.seed(seed)
+    random_ids = random.sample(range(n_videos), n)
+    print(random_ids)
+    df = con.sql(f"""
+                 SELECT id, mp4 
+                 FROM (SELECT mp4, ROW_NUMBER() OVER () AS id FROM '{DATASET_PATH}/*.parquet') 
+                 WHERE id IN ({', '.join([str(id) for id in random_ids])})
+                 """).fetch_arrow_table()
+    for idx, row in zip(df["id"], df["mp4"]):
+        with open(f"video_{idx}.mp4", "wb") as f:
+            f.write(row.as_py())
+        print(f"Saved video_{idx}.mp4")
+    return df
 
 # Extracting parquet files
 def extract_videos_from_parquet(dataset_path, temp_video_dir, num_videos, seed):
@@ -195,24 +215,28 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
 
     return results
 
+# if __name__ == "__main__":
+
+#     config = parse_config("./config.yaml")
+
+#     print("Extracting videos from Parquet files...")
+#     video_paths = extract_videos_from_parquet(
+#         DATASET_PATH, TEMP_VIDEO_DIR, num_videos=config["num_videos"], seed=config["seed"]
+#     )
+
+#     print("Benchmarking videos...")
+#     benchmark_results = benchmark_videos(
+#         video_paths,
+#         seconds_per_frame=config["fps_settings"],
+#         token_limit=config["token_settings"], 
+#         num_samples=config["num_samples"], 
+#         hf_token=config["hf_token"],
+#         compile=config["compile"]
+#     )
+
+#     for video_path in video_paths:
+#         os.remove(video_path)
+
+
 if __name__ == "__main__":
-
-    config = parse_config("./config.yaml")
-
-    print("Extracting videos from Parquet files...")
-    video_paths = extract_videos_from_parquet(
-        DATASET_PATH, TEMP_VIDEO_DIR, num_videos=config["num_videos"], seed=config["seed"]
-    )
-
-    print("Benchmarking videos...")
-    benchmark_results = benchmark_videos(
-        video_paths,
-        seconds_per_frame=config["fps_settings"],
-        token_limit=config["token_settings"], 
-        num_samples=config["num_samples"], 
-        hf_token=config["hf_token"],
-        compile=config["compile"]
-    )
-
-    for video_path in video_paths:
-        os.remove(video_path)
+    sample_n_videos(n=5, seed=42)
