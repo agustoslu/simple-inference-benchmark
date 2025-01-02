@@ -1,8 +1,7 @@
 import os
-from pathlib import Path
 import time
+from datetime import datetime
 import random
-import duckdb
 import yaml
 import cv2
 import json
@@ -12,115 +11,112 @@ from PIL import Image
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
+import duckdb
+from decord import VideoReader, cpu
 
 # Data paths
-DATASET_PATH = "./simple-inference-benchmark/dataset/FineVideo_20_Samples"
-TEMP_VIDEO_DIR = "./simple-inference-benchmark/dataset/temp_videos"
+DATASET_PATH = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/FineVideo_20_Samples"
+TEMP_VIDEO_DIR = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/temp_videos"
 LOG_FILE = "benchmark_log.txt"
 
 os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
 
+# Extract and sample videos
 def sample_n_videos(n: int, seed: int):
     con = duckdb.connect()
     n_videos = con.sql(f"SELECT COUNT(*) FROM '{DATASET_PATH}/*.parquet'").fetchone()[0]
     print(f"Total videos: {n_videos}")
     random.seed(seed)
     random_ids = random.sample(range(n_videos), n)
-    print(random_ids)
+    print(f"Randomly selected video IDs: {random_ids}")
     df = con.sql(f"""
-                 SELECT id, mp4 
-                 FROM (SELECT mp4, ROW_NUMBER() OVER () AS id FROM '{DATASET_PATH}/*.parquet') 
+                 SELECT id, mp4
+                 FROM (SELECT mp4, ROW_NUMBER() OVER () AS id FROM '{DATASET_PATH}/*.parquet')
                  WHERE id IN ({', '.join([str(id) for id in random_ids])})
                  """).fetch_arrow_table()
-    for idx, row in zip(df["id"], df["mp4"]):
-        with open(f"video_{idx}.mp4", "wb") as f:
-            f.write(row.as_py())
-        print(f"Saved video_{idx}.mp4")
-    return df
 
-# Extracting parquet files
-def extract_videos_from_parquet(dataset_path, temp_video_dir, num_videos, seed):
     video_paths = []
-    parquet_files = [f for f in os.listdir(dataset_path) if f.endswith(".parquet")] 
+    for idx, row in zip(df["id"], df["mp4"]):
+        temp_video_path = os.path.join(TEMP_VIDEO_DIR, f"video_{idx}.mp4")
+        print(temp_video_path)
+        with open(temp_video_path, "wb") as f:
+            f.write(row.as_py())
+        video_paths.append(temp_video_path)
+        print(f"Saved video to {temp_video_path}")
 
-    random.seed(seed)
+    return video_paths
 
-    for parquet_file in tqdm(parquet_files, desc="Processing Parquet files"):
-        parquet_path = os.path.join(dataset_path, parquet_file)
-        df = pd.read_parquet(parquet_path)
+# Employ uniform sampling for frames
+def uniform_sample(xs, n):
+    gap = len(xs) / n
+    idxs = [int(i * gap + gap / 2) for i in range(n)]
+    return [xs[i] for i in idxs]
 
-        for index, row in df.iterrows():
-            video_binary = row['mp4']
-            temp_video_path = os.path.join(temp_video_dir, f"{parquet_file}_video_{index}.mp4")
-            with open(temp_video_path, "wb") as f:
-                f.write(video_binary)
-            video_paths.append(temp_video_path)
+def process_video(video_path, token_limit, num_samples, model, tokenizer):
 
-    random_videos = random.sample(video_paths, num_videos)
-    return random_videos
+    # Say hello to your function :)
+    MAX_NUM_FRAMES = 64
 
-def process_video(video_path, seconds_per_frame, token_limit, num_samples, model, tokenizer):
-    cap = cv2.VideoCapture(video_path)
-    original_fps = cap.get(cv2.CAP_PROP_FPS)
-    seconds_per_frame_overwritten = 1 / seconds_per_frame # 1 / fps_setting value in the config
-    frame_interval = max(1, int(original_fps * seconds_per_frame))  # Frames to skip
-    frame_count = 0
+    try:
+        vr = VideoReader(str(video_path), ctx=cpu(0))
+        total_frames = len(vr)
+        print(f"Total Frames: {total_frames}")
+        fps = vr.get_avg_fps()
+        print(f"FPS: {fps}")
+        frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
+
+        frames = vr.get_batch(frame_indices).asnumpy()
+        frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
+    except Exception as e:
+        raise ValueError(f"Error processing video: {e}") from e
+
+
     tokens_generated = 0
-    queries = 0
+    num_videos = 0
     model_runtime = 0
     extra_runtime = 0
+    global_res = ""
 
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    progress_bar = tqdm(total=total_frames, desc=f"Processing {os.path.basename(video_path)}", unit="frame")
+    # Model inference
+    start_model_time = time.time()
+    try:
+        for _ in range(num_samples):
+            generation_config = {
+                "max_new_tokens": 120,
+                "sampling": False,
+                "stream": False,
+                "max_inp_length":8192*3
+            }
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        if frame_count % frame_interval == 0:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_pil = Image.fromarray(frame_rgb)
-            
-            # Prompt for generation
-            question = "Describe this video in detail"
-            msgs = [{"role": "user", "content": [frame_pil, question]}]
+            prompt = "Describe this video in detail."
+            msgs = [
+            {
+                "role": "user",
+                "content": [prompt] + frames
+            }
+            ]
 
-            # Model inference
-            start_model_time = time.time()
-            
-            try:
-                for _ in range(num_samples):
-                    generation_config = {
-                        "max_new_tokens": token_limit, 
-                        "sampling": False,  
-                        "stream": False,  
-                    }
-                    res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
-                    print(f"Generated Text for Frame {frame_count}: {res}")
-            except Exception as e:
-                print(f"Error processing frame {frame_count}: {e}")
-                res = ""
-                
-            model_runtime += time.time() - start_model_time
+            res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
+            global_res += res + "\n"
 
-            # Calculate time taken for additional operations
-            start_extra_time = time.time()
-            num_tokens = len(tokenizer.tokenize(res))
-            tokens_generated += num_tokens
-            queries += 1
-            extra_runtime += time.time() - start_extra_time
+            print(f"Generated Text for Video: {res}")
 
-        frame_count += 1
-        progress_bar.update(1)
+    except Exception as e:
+        raise ValueError(f"Error generating for video: {e}") from e
 
-    cap.release()
-    progress_bar.close()
+    model_runtime += time.time() - start_model_time
 
-    return tokens_generated, queries, model_runtime, extra_runtime
+    # Calculate time for additional operations
+    start_extra_time = time.time()
+    num_tokens = len(tokenizer.tokenize(res))
+    tokens_generated += num_tokens
+    num_videos += 1
+    extra_runtime += time.time() - start_extra_time
+
+    return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, hf_token, compile):
+def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
     model = AutoModel.from_pretrained(
         "openbmb/MiniCPM-V-2_6",
         trust_remote_code=True,
@@ -142,25 +138,27 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
     total_extra_runtime = 0
     total_queries = 0
     total_tokens = 0
-    global_peak_memory_allocated = 0 
+    global_peak_memory_allocated = 0
     global_peak_memory_reserved = 0
+    generations = ""
 
     for video_path in tqdm(video_paths, desc="Benchmarking videos"):
         print(f"\nProcessing: {video_path}")
         #torch.cuda.reset_peak_memory_stats()
         start_time = time.time()
-        
+
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
-        print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")        
+        print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
-        tokens_generated, queries, model_runtime, extra_runtime = process_video(
-            video_path, seconds_per_frame, token_limit, num_samples, model, tokenizer
+        tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
+            video_path, token_limit, num_samples, model, tokenizer
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
         global_peak_memory_allocated = max(global_peak_memory_allocated, peak_memory_allocated)
         global_peak_memory_reserved = max(global_peak_memory_reserved, peak_memory_reserved)
+        generations += global_res + "\n"
 
         video_runtime = time.time() - start_time
 
@@ -171,12 +169,12 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
         print(f"  Model Runtime: {model_runtime:.2f}s")
         print(f"  Extra Operations Runtime: {extra_runtime:.2f}s")
         print(f"  Tokens Generated: {tokens_generated}")
-        print(f"  Queries Made: {queries}")
-        
+        print(f"  Queries Made/Processed Videos: {num_videos}")
+
         total_runtime += video_runtime
         total_model_runtime += model_runtime
         total_extra_runtime += extra_runtime
-        total_queries += queries
+        total_queries += num_videos
         total_tokens += tokens_generated
 
         results.append({
@@ -185,58 +183,54 @@ def benchmark_videos(video_paths, seconds_per_frame, token_limit, num_samples, h
             "model_runtime": model_runtime,
             "extra_runtime": extra_runtime,
             "tokens": tokens_generated,
-            "queries": queries,
+            "queries/processed_videos": num_videos,
             "peak_memory_allocated": peak_memory_allocated,
             "peak_memory_reserved": peak_memory_reserved,
         })
 
-    qps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
-    tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0 
-    tpq = total_tokens / total_queries if total_queries > 0 else 0 
+    vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
+    tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
+    tpq = total_tokens / total_queries if total_queries > 0 else 0
+    video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     print("\nBenchmark Summary:")
     print(f"  Total Runtime: {total_runtime:.2f}s")
-    print(f"  Queries per Second (QPS): {qps:.2f}")
+    print(f"  Videos per Second (VPS): {vps:.2f}")
     print(f"  Tokens per Second (TPS): {tps:.2f}")
     print(f"  Tokens per Query (TPQ): {tpq:.2f}")
     print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
     print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
 
     with open(LOG_FILE, "a") as log_file:
+        log_file.write(f"Saved: {video_saved}\n")
         log_file.write(f"Total Runtime: {total_runtime}\n")
         log_file.write(f"Model Runtime: {total_model_runtime}\n")
         log_file.write(f"Extra Runtime: {total_extra_runtime}\n")
-        log_file.write(f"QPS: {qps}\n")
+        log_file.write(f"VPS: {vps}\n")
         log_file.write(f"TPS: {tps}\n")
         log_file.write(f"TPQ: {tpq}\n")
         log_file.write(f"Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB\n")
         log_file.write(f"Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB\n")
+        log_file.write(f"Generations: {generations}")
         log_file.write("\n")
 
     return results
 
-# if __name__ == "__main__":
-
-#     config = parse_config("./config.yaml")
-
-#     print("Extracting videos from Parquet files...")
-#     video_paths = extract_videos_from_parquet(
-#         DATASET_PATH, TEMP_VIDEO_DIR, num_videos=config["num_videos"], seed=config["seed"]
-#     )
-
-#     print("Benchmarking videos...")
-#     benchmark_results = benchmark_videos(
-#         video_paths,
-#         seconds_per_frame=config["fps_settings"],
-#         token_limit=config["token_settings"], 
-#         num_samples=config["num_samples"], 
-#         hf_token=config["hf_token"],
-#         compile=config["compile"]
-#     )
-
-#     for video_path in video_paths:
-#         os.remove(video_path)
-
-
 if __name__ == "__main__":
-    sample_n_videos(n=5, seed=42)
+
+    config = parse_config("./config.yaml")
+    print("Extracting videos from Parquet files...")
+    video_paths = sample_n_videos(5, 42)
+
+    print("Benchmarking videos...")
+    benchmark_results = benchmark_videos(
+        video_paths,
+        #seconds_per_frame=config["fps_settings"],
+        token_limit=120,
+        num_samples=config["num_samples"],
+        hf_token=config["hf_token"],
+        compile=config["compile"]
+    )
+
+    for video_path in video_paths:
+        os.remove(video_path)
