@@ -1,9 +1,8 @@
 # pip install -r ./requirements.txt --verbose (without --verbose, does not work properly on the server, it just freezes.)
 
-
 # Some other dependencies: 
 
-# apt install wget
+# apt-get install -y wget
 # apt-get install -y libgl1
 # apt-get install -y libglib2.0-0
 
@@ -15,6 +14,15 @@ transformers==4.40.0
 sentencepiece==0.1.99
 decord
 duckdb
+
+# Minicpm-quantized:
+Pillow==10.1.0
+torch==2.1.2
+torchvision==0.16.2
+transformers==4.40.0
+sentencepiece==0.1.99
+accelerate==0.30.1
+bitsandbytes==0.43.1
 
 # FineVideo
 pyarrow

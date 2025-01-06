@@ -5,6 +5,7 @@ import random
 import yaml
 import cv2
 import json
+import csv
 import pandas as pd
 import torch
 from PIL import Image
@@ -17,7 +18,7 @@ from decord import VideoReader, cpu
 # Data paths
 DATASET_PATH = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/FineVideo_20_Samples"
 TEMP_VIDEO_DIR = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/temp_videos"
-LOG_FILE = "benchmark_log.txt"
+#LOG_FILE = "benchmark_log.txt"
 
 os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
 
@@ -123,8 +124,8 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
         attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,
         use_auth_token=hf_token
-    ).eval().cuda()
-
+    ).eval().cuda() # comment out cuda to run quantized minicpm("openbmb/MiniCPM-V-2_6-int4")
+  
     if compile:
         model = torch.compile(model)
 
@@ -177,21 +178,47 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
         total_queries += num_videos
         total_tokens += tokens_generated
 
-        results.append({
-            "video": video_path,
-            "runtime": video_runtime,
-            "model_runtime": model_runtime,
-            "extra_runtime": extra_runtime,
-            "tokens": tokens_generated,
-            "queries/processed_videos": num_videos,
-            "peak_memory_allocated": peak_memory_allocated,
-            "peak_memory_reserved": peak_memory_reserved,
-        })
-
     vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
     tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
     tpq = total_tokens / total_queries if total_queries > 0 else 0
     video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+    results.append({
+            "Timestamp": video_saved,
+            "Total_Runtime": total_runtime,
+            "Model_Runtime": total_model_runtime,
+            "Extra_Runtime": total_extra_runtime,
+            "VPS": vps,
+            "TPS": tps,
+            "TPQ": tpq,
+            "Peak_Memory_Allocated": global_peak_memory_allocated,
+            "Peak_Memory_Reserved": global_peak_memory_reserved,
+            "Generations": generations,
+    })
+
+    csv_file = "benchmark_log.csv"
+    csv_header = [
+        "Timestamp",
+        "Total_Runtime",
+        "Model_Runtime",
+        "Extra_Runtime",
+        "VPS",
+        "TPS",
+        "TPQ",
+        "Peak_Memory_Allocated",
+        "Peak_Memory_Reserved",
+        "Generations",
+    ]
+    
+    file_exists = os.path.exists(csv_file)
+
+    with open(csv_file, mode="a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_header)
+        if not file_exists:
+            writer.writeheader()
+        for result in results:
+            writer.writerow(result)
 
     print("\nBenchmark Summary:")
     print(f"  Total Runtime: {total_runtime:.2f}s")
@@ -201,20 +228,20 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
     print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
     print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
 
-    with open(LOG_FILE, "a") as log_file:
-        log_file.write(f"Saved: {video_saved}\n")
-        log_file.write(f"Total Runtime: {total_runtime}\n")
-        log_file.write(f"Model Runtime: {total_model_runtime}\n")
-        log_file.write(f"Extra Runtime: {total_extra_runtime}\n")
-        log_file.write(f"VPS: {vps}\n")
-        log_file.write(f"TPS: {tps}\n")
-        log_file.write(f"TPQ: {tpq}\n")
-        log_file.write(f"Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB\n")
-        log_file.write(f"Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB\n")
-        log_file.write(f"Generations: {generations}")
-        log_file.write("\n")
+    # with open(LOG_FILE, "a") as log_file:
+    #     log_file.write(f"Saved: {video_saved}\n")
+    #     log_file.write(f"Total Runtime: {total_runtime}\n")
+    #     log_file.write(f"Model Runtime: {total_model_runtime}\n")
+    #     log_file.write(f"Extra Runtime: {total_extra_runtime}\n")
+    #     log_file.write(f"VPS: {vps}\n")
+    #     log_file.write(f"TPS: {tps}\n")
+    #     log_file.write(f"TPQ: {tpq}\n")
+    #     log_file.write(f"Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB\n")
+    #     log_file.write(f"Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB\n")
+    #     log_file.write(f"Generations: {generations}")
+    #     log_file.write("\n")
 
-    return results
+    return
 
 if __name__ == "__main__":
 
