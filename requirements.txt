@@ -32,3 +32,5 @@ opencv-python
 
 # env variable config file
 pyaml-env
+
+pyyaml
