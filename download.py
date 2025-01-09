@@ -1,9 +1,15 @@
 import os
+from pathlib import Path
 from pyaml_env import parse_config
 
 config = parse_config("./config.yaml")
-output_folder = "./simple-inference-benchmark/dataset/FineVideo_20_Samples"
-os.makedirs(output_folder, exist_ok=True)
+
+
+base_dir = Path(__file__).parent / "dataset"
+DATASET_PATH = base_dir / "FineVideo_parquet"
+MP4_DATASET_PATH = base_dir / "FineVideo_mp4"
+DATASET_PATH.mkdir(parents=True, exist_ok=True)
+MP4_DATASET_PATH.mkdir(parents=True, exist_ok=True)
 
 base_url = "https://huggingface.co/datasets/HuggingFaceFV/finevideo/resolve/main/data/"
 
@@ -18,9 +24,9 @@ def download_finevideo_parquet(i: int) -> None:
     file_url = f"{base_url}{file_name}"
     header = f'--header="Authorization: Bearer {access_token}"'
     print(f"Downloading {file_name}...")
-    os.system(f"wget {header} -P {output_folder} {file_url}")
+    os.system(f"wget {header} -P {DATASET_PATH} {file_url}")
 
 
-download_finevideo_parquet(i=0)
-
-print("Done downloading")
+if __name__ == "__main__":
+    download_finevideo_parquet(i=0)
+    print("Done downloading")

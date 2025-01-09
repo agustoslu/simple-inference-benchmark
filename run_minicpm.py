@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import time
 from datetime import datetime
 import random
@@ -14,6 +15,7 @@ from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
 import duckdb
 from decord import VideoReader, cpu
+from download import DATASET_PATH, MP4_DATASET_PATH
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -31,12 +33,12 @@ def sample_n_videos(n: int, seed: int):
 
     video_paths = []
     for idx, row in zip(df["id"], df["mp4"]):
-        temp_video_path = os.path.join(TEMP_VIDEO_DIR, f"video_{idx}.mp4")
-        print(temp_video_path)
-        with open(temp_video_path, "wb") as f:
-            f.write(row.as_py())
-        video_paths.append(temp_video_path)
-        print(f"Saved video to {temp_video_path}")
+        mp4_video_path = os.path.join(MP4_DATASET_PATH, f"video_{idx}.mp4")
+        if not Path(mp4_video_path).exists():
+            with open(mp4_video_path, "wb") as f:
+                f.write(row.as_py())
+            print(f"Saved video to {mp4_video_path}")
+        video_paths.append(mp4_video_path)
 
     return video_paths
 
@@ -228,11 +230,7 @@ if __name__ == "__main__":
     config = parse_config("./config.yaml")
 
     # Data paths
-    DATASET_PATH = config["home_dir"] + "/simple-inference-benchmark/dataset/FineVideo_20_Samples"
-    TEMP_VIDEO_DIR = config["home_dir"] + "/simple-inference-benchmark/dataset/temp_videos"
     LOG_FILE = "benchmark_log.txt"
-
-    os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
     
     print("Extracting videos from Parquet files...")
     video_paths = sample_n_videos(5, 42)

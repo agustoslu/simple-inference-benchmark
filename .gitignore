@@ -1,5 +1,6 @@
 # Ignore dataset
 simple-inference-benchmark/dataset
+dataset
 *.mp4
 
 
