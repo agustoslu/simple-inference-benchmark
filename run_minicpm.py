@@ -15,13 +15,6 @@ from pyaml_env import parse_config
 import duckdb
 from decord import VideoReader, cpu
 
-# Data paths
-DATASET_PATH = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/FineVideo_20_Samples"
-TEMP_VIDEO_DIR = "/dss/dsshome1/02/ra79vom2/simple-inference-benchmark/dataset/temp_videos"
-#LOG_FILE = "benchmark_log.txt"
-
-os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
-
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
     con = duckdb.connect()
@@ -228,24 +221,19 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
     print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
     print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
 
-    # with open(LOG_FILE, "a") as log_file:
-    #     log_file.write(f"Saved: {video_saved}\n")
-    #     log_file.write(f"Total Runtime: {total_runtime}\n")
-    #     log_file.write(f"Model Runtime: {total_model_runtime}\n")
-    #     log_file.write(f"Extra Runtime: {total_extra_runtime}\n")
-    #     log_file.write(f"VPS: {vps}\n")
-    #     log_file.write(f"TPS: {tps}\n")
-    #     log_file.write(f"TPQ: {tpq}\n")
-    #     log_file.write(f"Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB\n")
-    #     log_file.write(f"Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB\n")
-    #     log_file.write(f"Generations: {generations}")
-    #     log_file.write("\n")
-
     return
 
 if __name__ == "__main__":
 
     config = parse_config("./config.yaml")
+
+    # Data paths
+    DATASET_PATH = config["home_dir"] + "/simple-inference-benchmark/dataset/FineVideo_20_Samples"
+    TEMP_VIDEO_DIR = config["home_dir"] + "/simple-inference-benchmark/dataset/temp_videos"
+    LOG_FILE = "benchmark_log.txt"
+
+    os.makedirs(TEMP_VIDEO_DIR, exist_ok=True)
+    
     print("Extracting videos from Parquet files...")
     video_paths = sample_n_videos(5, 42)
 
