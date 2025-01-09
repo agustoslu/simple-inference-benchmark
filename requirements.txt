@@ -27,3 +27,5 @@ opencv-python
 pyaml-env
 
 pyyaml
+
+hf_transfer # to download models from huggingface fast
