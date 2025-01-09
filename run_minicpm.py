@@ -3,11 +3,7 @@ from pathlib import Path
 import time
 from datetime import datetime
 import random
-import yaml
-import cv2
-import json
 import csv
-import pandas as pd
 import torch
 from PIL import Image
 from tqdm import tqdm
@@ -128,7 +124,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
     return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(config, model_id, video_paths, output_token_limit):
+def benchmark_videos(config, model_id, video_paths):
     print(f"Initializing model '{model_id}'...")
     model = load_model(model_id, config)
 
@@ -157,7 +153,7 @@ def benchmark_videos(config, model_id, video_paths, output_token_limit):
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
         tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
-            video_path, output_token_limit, config["num_samples"], model, tokenizer
+            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -248,5 +244,4 @@ if __name__ == "__main__":
             config,
             model_id,
             video_paths,
-            output_token_limit=120,
         )
