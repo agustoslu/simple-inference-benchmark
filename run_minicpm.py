@@ -48,39 +48,19 @@ def uniform_sample(xs, n):
     idxs = [int(i * gap + gap / 2) for i in range(n)]
     return [xs[i] for i in idxs]
 
-global_model_id = ""
 
-def load_model(config):
-    models = config.get("models", {})
-    for model_name, settings in models.items():
-        use_normal = settings.get("use_normal", True)
-        model_ids = settings.get("model_ids", {})
-        model_id = model_ids.get("normal" if use_normal else "quantized")
-        print(f"Model_ID: {model_id}")
-        if model_id == "openbmb/MiniCPM-V-2_6-int4": # quantized minicpm does not want .cuda()
-            hf_model = AutoModel.from_pretrained(
-                model_id,
-                trust_remote_code=True,
-                attn_implementation="flash_attention_2",
-                torch_dtype=torch.bfloat16,
-                use_auth_token=config["hf_token"],
-            ).eval()
+def load_model(model_id: str, config: dict):
+    """Loads model from huggingface"""
+    model = AutoModel.from_pretrained(
+        model_id,
+        trust_remote_code=True,
+        attn_implementation="flash_attention_2",
+        torch_dtype=torch.bfloat16,
+        token=config["hf_token"],
+        device_map="cuda",
+    ).eval()
+    return model
 
-            global_model_id += "{model_id}"
-            print(f"Global model id: {global_model_id}")
-
-        else:
-            hf_model = AutoModel.from_pretrained(
-                model_id,
-                trust_remote_code=True,
-                attn_implementation="flash_attention_2",
-                torch_dtype=torch.bfloat16,
-                use_auth_token=config["hf_token"],
-            ).eval().cuda()
-
-            global_model_id += "{model_id}"
-            print(f"Global model id: {global_model_id}")
-    return hf_model
 
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
@@ -148,11 +128,13 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
     return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(config, video_paths, token_limit, num_samples, hf_token, compile):
-    model = load_model(config)
-    tokenizer = create_tokenizer(global_model_id)
+def benchmark_videos(config, model_id, video_paths, output_token_limit):
+    print(f"Initializing model '{model_id}'...")
+    model = load_model(model_id, config)
 
-    if compile:
+    tokenizer = create_tokenizer(model_id)
+
+    if config["compile"]:
         model = torch.compile(model)
 
     results = []
@@ -175,7 +157,7 @@ def benchmark_videos(config, video_paths, token_limit, num_samples, hf_token, co
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
         tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
-            video_path, token_limit, num_samples, model, tokenizer
+            video_path, output_token_limit, config["num_samples"], model, tokenizer
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -204,7 +186,6 @@ def benchmark_videos(config, video_paths, token_limit, num_samples, hf_token, co
     tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
     tpq = total_tokens / total_queries if total_queries > 0 else 0
     video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    model_id = global_model_id
 
     results.append({
             "Timestamp": video_saved,
@@ -259,18 +240,13 @@ if __name__ == "__main__":
     config = parse_config("./config.yaml")
    
     print("Extracting videos from Parquet files...")
-    video_paths = sample_n_videos(5, 42)
+    video_paths = sample_n_videos(5, seed=42)
 
-    print("Benchmarking videos...")
-    benchmark_results = benchmark_videos(
-        config,
-        video_paths,
-        #seconds_per_frame=config["fps_settings"],
-        token_limit=120,
-        num_samples=config["num_samples"],
-        hf_token=config["hf_token"],
-        compile=config["compile"]
-    )
-
-    for video_path in video_paths:
-        os.remove(video_path)
+    for model_id in config["models"]:
+        print("Benchmarking videos...")
+        benchmark_videos(
+            config,
+            model_id,
+            video_paths,
+            output_token_limit=120,
+        )

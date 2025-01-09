@@ -15,10 +15,7 @@ seed: 42
 compile: False # activate torch.compile()
 # avoid_cache: False (TODO: place some random characters into prompt to avoid cache)
 models:
-  minicpm:
-    use_normal: False
-    model_ids:
-      normal: openbmb/MiniCPM-V-2_6
-      quantized: openbmb/MiniCPM-V-2_6-int4
+  - openbmb/MiniCPM-V-2_6
+  - openbmb/MiniCPM-V-2_6-int4
   # internvl:
   # llama:
