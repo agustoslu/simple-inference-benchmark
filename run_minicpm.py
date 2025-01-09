@@ -50,7 +50,7 @@ def uniform_sample(xs, n):
 
 global_model_id = ""
 
-def load_model():
+def load_model(config):
     models = config.get("models", {})
     for model_name, settings in models.items():
         use_normal = settings.get("use_normal", True)
@@ -148,8 +148,8 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
     return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
-    model = load_model()
+def benchmark_videos(config, video_paths, token_limit, num_samples, hf_token, compile):
+    model = load_model(config)
     tokenizer = create_tokenizer(global_model_id)
 
     if compile:
@@ -263,6 +263,7 @@ if __name__ == "__main__":
 
     print("Benchmarking videos...")
     benchmark_results = benchmark_videos(
+        config,
         video_paths,
         #seconds_per_frame=config["fps_settings"],
         token_limit=120,

@@ -16,6 +16,7 @@ for fps in config["fps_settings"]:
         print(f"\nRunning experiment with FPS={fps}, Token Limit={token_limit}...\n")
 
         benchmark_results = benchmark_videos(
+            config,
             video_paths,
             token_limit=token_limit,
             num_samples=config["num_samples"],
