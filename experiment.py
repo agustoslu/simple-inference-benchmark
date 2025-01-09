@@ -1,14 +1,3 @@
-import os
-import time
-import random
-import yaml
-import cv2
-import json
-import pandas as pd
-import torch
-from PIL import Image
-from tqdm import tqdm
-from transformers import AutoModel, AutoTokenizer
 from run_minicpm import benchmark_videos, sample_n_videos
 from pyaml_env import parse_config
 
