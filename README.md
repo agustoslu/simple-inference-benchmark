@@ -15,5 +15,5 @@ python download.py
 
 Run the experiment
 ```bash
-python experiment.py
+python run_minicpm.py
 ```
