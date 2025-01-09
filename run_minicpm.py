@@ -48,6 +48,43 @@ def uniform_sample(xs, n):
     idxs = [int(i * gap + gap / 2) for i in range(n)]
     return [xs[i] for i in idxs]
 
+global_model_id = ""
+
+def load_model():
+    models = config.get("models", {})
+    for model_name, settings in models.items():
+        use_normal = settings.get("use_normal", True)
+        model_ids = settings.get("model_ids", {})
+        model_id = model_ids.get("normal" if use_normal else "quantized")
+        print(f"Model_ID: {model_id}")
+        if model_id == "openbmb/MiniCPM-V-2_6-int4": # quantized minicpm does not want .cuda()
+            hf_model = AutoModel.from_pretrained(
+                model_id,
+                trust_remote_code=True,
+                attn_implementation="flash_attention_2",
+                torch_dtype=torch.bfloat16,
+                use_auth_token=config["hf_token"],
+            ).eval()
+
+            global_model_id += "{model_id}"
+            print(f"Global model id: {global_model_id}")
+
+        else:
+            hf_model = AutoModel.from_pretrained(
+                model_id,
+                trust_remote_code=True,
+                attn_implementation="flash_attention_2",
+                torch_dtype=torch.bfloat16,
+                use_auth_token=config["hf_token"],
+            ).eval().cuda()
+
+            global_model_id += "{model_id}"
+            print(f"Global model id: {global_model_id}")
+    return hf_model
+
+def create_tokenizer(model_id):
+    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+
 def process_video(video_path, token_limit, num_samples, model, tokenizer):
 
     # Say hello to your function :)
@@ -65,7 +102,6 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
         frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
-
 
     tokens_generated = 0
     num_videos = 0
@@ -93,7 +129,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
             ]
 
             res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
-            global_res += res + "\n"
+            global_res += res
 
             print(f"Generated Text for Video: {res}")
 
@@ -113,20 +149,11 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
 
 
 def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
-    model = AutoModel.from_pretrained(
-        "openbmb/MiniCPM-V-2_6",
-        trust_remote_code=True,
-        attn_implementation="flash_attention_2",
-        torch_dtype=torch.bfloat16,
-        use_auth_token=hf_token
-    ).eval().cuda() # comment out cuda to run quantized minicpm("openbmb/MiniCPM-V-2_6-int4")
-  
+    model = load_model()
+    tokenizer = create_tokenizer(global_model_id)
+
     if compile:
         model = torch.compile(model)
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        "openbmb/MiniCPM-V-2_6", trust_remote_code=True, use_auth_token=hf_token
-    )
 
     results = []
     total_runtime = 0
@@ -154,7 +181,7 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
         global_peak_memory_allocated = max(global_peak_memory_allocated, peak_memory_allocated)
         global_peak_memory_reserved = max(global_peak_memory_reserved, peak_memory_reserved)
-        generations += global_res + "\n"
+        generations += global_res + ";"
 
         video_runtime = time.time() - start_time
 
@@ -177,10 +204,11 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
     tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
     tpq = total_tokens / total_queries if total_queries > 0 else 0
     video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+    model_id = global_model_id
 
     results.append({
             "Timestamp": video_saved,
+            "Model ID": model_id,
             "Total_Runtime": total_runtime,
             "Model_Runtime": total_model_runtime,
             "Extra_Runtime": total_extra_runtime,
@@ -195,6 +223,7 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
     csv_file = "benchmark_log.csv"
     csv_header = [
         "Timestamp",
+        "Model ID",
         "Total_Runtime",
         "Model_Runtime",
         "Extra_Runtime",
@@ -228,10 +257,7 @@ def benchmark_videos(video_paths, token_limit, num_samples, hf_token, compile):
 if __name__ == "__main__":
 
     config = parse_config("./config.yaml")
-
-    # Data paths
-    LOG_FILE = "benchmark_log.txt"
-    
+   
     print("Extracting videos from Parquet files...")
     video_paths = sample_n_videos(5, 42)
 
