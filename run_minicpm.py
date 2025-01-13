@@ -44,6 +44,9 @@ def uniform_sample(xs, n):
     idxs = [int(i * gap + gap / 2) for i in range(n)]
     return [xs[i] for i in idxs]
 
+def fps_sample(xs, fps, total_range): 
+    idxs = [i * fps for i in range(xs // fps)]
+    return [total_range[i] for i in idxs]
 
 def load_model(model_id: str, config: dict):
     """Loads model from huggingface"""
@@ -64,7 +67,7 @@ def create_tokenizer(model_id):
 def process_video(video_path, token_limit, num_samples, model, tokenizer):
 
     # Say hello to your function :)
-    MAX_NUM_FRAMES = 64
+    #MAX_NUM_FRAMES = 64
 
     try:
         vr = VideoReader(str(video_path), ctx=cpu(0))
@@ -72,7 +75,8 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
         print(f"Total Frames: {total_frames}")
         fps = vr.get_avg_fps()
         print(f"FPS: {fps}")
-        frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
+        #frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
+        frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
 
         frames = vr.get_batch(frame_indices).asnumpy()
         frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
@@ -93,7 +97,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
                 "max_new_tokens": 120,
                 "sampling": False,
                 "stream": False,
-                "max_inp_length":8192*3
+                "max_inp_length":8192*5
             }
 
             prompt = "Describe this video in detail."
