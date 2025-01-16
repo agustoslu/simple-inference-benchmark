@@ -60,14 +60,14 @@ def load_model(model_id: str, config: dict):
     ).eval()
     return model
 
-
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
 def process_video(video_path, token_limit, num_samples, model, tokenizer):
 
     # Say hello to your function :)
-    #MAX_NUM_FRAMES = 64
+    MAX_NUM_FRAMES = 64
+    frame_indices = []
 
     try:
         vr = VideoReader(str(video_path), ctx=cpu(0))
@@ -75,8 +75,17 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
         print(f"Total Frames: {total_frames}")
         fps = vr.get_avg_fps()
         print(f"FPS: {fps}")
-        #frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
-        frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
+        total_frames_int = int(total_frames)
+        print(f"total transformed: {total_frames_int}")
+        if total_frames <= 4500:
+            frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
+            print(f"frame indices: {frame_indices}")
+            print(f"total frames passed(uniform): {len(frame_indices)}")
+            # counter.append(len(frame_indices))
+        elif total_frames > 4500:
+            frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
+            print(f"frame indices: {frame_indices}")
+            print(f"total frames passed(fps): {len(frame_indices)}")
 
         frames = vr.get_batch(frame_indices).asnumpy()
         frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
