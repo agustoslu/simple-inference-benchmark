@@ -12,6 +12,7 @@ from pyaml_env import parse_config
 import duckdb
 from decord import VideoReader, cpu
 from download import DATASET_PATH, MP4_DATASET_PATH
+from collections import defaultdict
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -68,7 +69,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
     # Say hello to your function :)
     MAX_NUM_FRAMES = 64
     frame_indices = []
-
+    
     try:
         vr = VideoReader(str(video_path), ctx=cpu(0))
         total_frames = len(vr)
@@ -80,13 +81,14 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
         if total_frames <= 4500:
             frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
             print(f"frame indices: {frame_indices}")
-            print(f"total frames passed(uniform): {len(frame_indices)}")
-            # counter.append(len(frame_indices))
+            print(f"total frames passed(fps): {len(frame_indices)}")
+
         elif total_frames > 4500:
             frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
             print(f"frame indices: {frame_indices}")
-            print(f"total frames passed(fps): {len(frame_indices)}")
+            print(f"total frames passed(uniform): {len(frame_indices)}")
 
+        
         frames = vr.get_batch(frame_indices).asnumpy()
         frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
     except Exception as e:
