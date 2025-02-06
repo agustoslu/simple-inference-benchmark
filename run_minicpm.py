@@ -66,28 +66,39 @@ def create_tokenizer(model_id):
 
 def process_video(video_path, token_limit, num_samples, model, tokenizer):
 
+
     # Say hello to your function :)
     MAX_NUM_FRAMES = 64
     frame_indices = []
     
     try:
         vr = VideoReader(str(video_path), ctx=cpu(0))
+        total = []
         total_frames = len(vr)
+        for i in vr:
+            total.append(i)
+        
+        #breakpoint()
         print(f"Total Frames: {total_frames}")
         fps = vr.get_avg_fps()
         print(f"FPS: {fps}")
         total_frames_int = int(total_frames)
         print(f"total transformed: {total_frames_int}")
-        if total_frames <= 4500:
+        if total_frames <= 6000:
             frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
             print(f"frame indices: {frame_indices}")
             print(f"total frames passed(fps): {len(frame_indices)}")
 
-        elif total_frames > 4500:
-            frame_indices = uniform_sample(range(total_frames), MAX_NUM_FRAMES)
-            print(f"frame indices: {frame_indices}")
-            print(f"total frames passed(uniform): {len(frame_indices)}")
-
+        elif total_frames > 6000:
+            total_fps = total[:6000]
+            total_uni = total[6000:]
+            # total uni starts from zero since it's newly created even tough frames after 4000 are added
+            frame_indices = fps_sample(int(len(total_fps)), round(fps), range(len(total_fps)))
+            frame_indices_uni = uniform_sample(range(len(total_uni)), MAX_NUM_FRAMES)
+            print(f"frame indices_fps: {frame_indices}")
+            print(f"total frames passed(fps): {len(frame_indices)}")
+            print(f"frame indices_uni: {frame_indices_uni}")
+            print(f"total frames passed(uni): {len(frame_indices_uni)}")
         
         frames = vr.get_batch(frame_indices).asnumpy()
         frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
@@ -105,10 +116,11 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
     try:
         for _ in range(num_samples):
             generation_config = {
-                "max_new_tokens": 120,
+                "max_new_tokens": 170,
                 "sampling": False,
                 "stream": False,
-                "max_inp_length":8192*5
+                "max_inp_length":8192*7,
+                "temperature": 0, 
             }
 
             prompt = "Describe this video in detail."
