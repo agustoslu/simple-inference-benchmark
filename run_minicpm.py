@@ -170,9 +170,8 @@ def benchmark_videos(config, model_id, video_paths):
     global_peak_memory_reserved = 0
     generations = ""
 
-    for video_path in tqdm(video_paths, desc="Benchmarking videos"):
+    for video_path in tqdm(video_paths, desc="Benchmarking models"):
         print(f"\nProcessing: {video_path}")
-        #torch.cuda.reset_peak_memory_stats()
         start_time = time.time()
 
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
@@ -256,6 +255,8 @@ def benchmark_videos(config, model_id, video_paths):
     print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
     print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
 
+    torch.cuda.reset_peak_memory_stats()
+    
     return
 
 if __name__ == "__main__":
