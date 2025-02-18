@@ -28,4 +28,9 @@ pyaml-env
 
 pyyaml
 
+# metrics
+rouge-score
+bert-score
+scikit-learn
+
 hf_transfer # to download models from huggingface fast
