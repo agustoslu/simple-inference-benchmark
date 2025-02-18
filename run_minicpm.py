@@ -13,6 +13,7 @@ import duckdb
 from decord import VideoReader, cpu
 from download import DATASET_PATH, MP4_DATASET_PATH
 from collections import defaultdict
+from utils import get_posts
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -64,13 +65,22 @@ def load_model(model_id: str, config: dict):
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
-def process_video(video_path, token_limit, num_samples, model, tokenizer):
+def metadata_generator(meta_data):
+    for i in meta_data:
+        yield i
+
+def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_data):
 
 
     # Say hello to your function :)
     MAX_NUM_FRAMES = 64
     frame_indices = []
     
+    # pass metadata, we get each instance inside benchmark_videos using generator
+    author = meta_data["author_name"]
+    video = meta_data["video_description"]
+
+
     try:
         vr = VideoReader(str(video_path), ctx=cpu(0))
         total = []
@@ -151,7 +161,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer):
     return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(config, model_id, video_paths):
+def benchmark_videos(config, model_id, video_paths, meta_data):
     print(f"Initializing model '{model_id}'...")
     model = load_model(model_id, config)
 
@@ -169,17 +179,21 @@ def benchmark_videos(config, model_id, video_paths):
     global_peak_memory_allocated = 0
     global_peak_memory_reserved = 0
     generations = ""
+    
+    meta_iter = metadata_generator(meta_data)
 
     for video_path in tqdm(video_paths, desc="Benchmarking models"):
         print(f"\nProcessing: {video_path}")
         start_time = time.time()
+        
+        meta = next(meta_iter)
 
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
         tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
-            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer
+            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -263,8 +277,22 @@ if __name__ == "__main__":
 
     config = parse_config("./config.yaml")
    
-    print("Extracting videos from Parquet files...")
-    video_paths = sample_n_videos(5, seed=42)
+    #print("Extracting videos from Parquet files...")
+    #video_paths = sample_n_videos(5, seed=42)
+    print("ToxicAInment data used ...")
+    videos, slides = get_posts()
+    video_paths = []
+    meta_data = []
+
+    for v in videos:
+        video_info = videos[v]
+        video_paths.append(video_info["video_path"])
+
+        meta_data.append({
+        "author_name": video_info["author_name"],
+        "video_description": video_info["video_description"]
+       })
+
 
     for model_id in config["models"]:
         print("Benchmarking videos...")
@@ -272,4 +300,5 @@ if __name__ == "__main__":
             config,
             model_id,
             video_paths,
+            meta_data,
         )

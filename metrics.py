@@ -1,6 +1,8 @@
 from rouge_score import rouge_scorer  # pip install rouge-score
 from bert_score import score # pip install bert-score
 import numpy as np
+from sklearn.metrics import cohen_kappa_score # pip install scikit-learn
+
 
 def calc_rouge(text1, text2):
     scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
@@ -18,3 +20,6 @@ def calc_bertscore(text1, text2):
     R_mean = R.cpu().numpy().mean()
     F1_mean = F1.cpu().numpy().mean()
     return float(P_mean), float(R_mean), float(F1_mean)
+
+def calc_cohen_kappa(label1, label2):
+    return cohen_kappa_score(label1, label2)
