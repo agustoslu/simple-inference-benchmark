@@ -10,7 +10,7 @@
 Pillow
 torch
 torchvision
-transformers
+transformers==4.47.1 # otherwise we get valueError related to broadcasting / in the library they have changed iterable to sequence in 4.49.1
 sentencepiece
 decord
 duckdb
