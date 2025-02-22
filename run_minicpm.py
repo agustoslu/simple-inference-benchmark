@@ -69,9 +69,24 @@ def metadata_generator(meta_data):
     for i in meta_data:
         yield i
 
-def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_data):
+def fill_prompt(meta_data, prompt):
+    slide_desc = meta_data["author_name"]
+    slide_author = meta_data["video_description"]
+    filled = prompt % (slide_desc, slide_author)
+    return filled
 
+def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_data, slide_meta_data):
 
+    ## TODO:
+    ## pass metadata for slides
+    ## a function to batch slide_paths after VideoReader processing + mp3 paths
+
+    with open("prompt.txt", "r") as f:
+        data = f.read()
+
+    prompt_text = "".join(data)
+    filled_prompt = fill_prompt(meta_data, prompt_text)
+    
     # Say hello to your function :)
     MAX_NUM_FRAMES = 64
     frame_indices = []
@@ -88,7 +103,6 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
         for i in vr:
             total.append(i)
         
-        #breakpoint()
         print(f"Total Frames: {total_frames}")
         fps = vr.get_avg_fps()
         print(f"FPS: {fps}")
@@ -126,14 +140,14 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     try:
         for _ in range(num_samples):
             generation_config = {
-                "max_new_tokens": 170,
+                "max_new_tokens": 250,
                 "sampling": False,
                 "stream": False,
                 "max_inp_length":8192*7,
                 "temperature": 0, 
             }
 
-            prompt = "Describe this video in detail."
+            prompt = filled_prompt
             msgs = [
             {
                 "role": "user",
@@ -161,7 +175,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(config, model_id, video_paths, meta_data):
+def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     print(f"Initializing model '{model_id}'...")
     model = load_model(model_id, config)
 
@@ -179,6 +193,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data):
     global_peak_memory_allocated = 0
     global_peak_memory_reserved = 0
     generations = ""
+    current_video = ""
     
     meta_iter = metadata_generator(meta_data)
 
@@ -187,13 +202,13 @@ def benchmark_videos(config, model_id, video_paths, meta_data):
         start_time = time.time()
         
         meta = next(meta_iter)
-
+        current_video += video_path + ";"
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
         tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
-            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta
+            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta, slide_meta_data
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -234,10 +249,11 @@ def benchmark_videos(config, model_id, video_paths, meta_data):
             "TPQ": tpq,
             "Peak_Memory_Allocated": global_peak_memory_allocated,
             "Peak_Memory_Reserved": global_peak_memory_reserved,
+            "Processed_Video": current_video,
             "Generations": generations,
     })
 
-    csv_file = "benchmark_log.csv"
+    csv_file = "toxicainment_videos_log.csv"
     csv_header = [
         "Timestamp",
         "Model ID",
@@ -249,6 +265,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data):
         "TPQ",
         "Peak_Memory_Allocated",
         "Peak_Memory_Reserved",
+        "Proccessed_Video",
         "Generations",
     ]
     
@@ -282,7 +299,9 @@ if __name__ == "__main__":
     print("ToxicAInment data used ...")
     videos, slides = get_posts()
     video_paths = []
+    slide_paths = []
     meta_data = []
+    slide_meta_data = []
 
     for v in videos:
         video_info = videos[v]
@@ -293,6 +312,15 @@ if __name__ == "__main__":
         "video_description": video_info["video_description"]
        })
 
+    for s in slides:
+        slide_info = slides[s]
+        slide_paths.append(slide_info["slide_path"])
+
+        slide_meta_data.append({
+        "author_name": slide_info["author_name"],
+        "slide_description": slide_info["slide_description"]
+       })
+
 
     for model_id in config["models"]:
         print("Benchmarking videos...")
@@ -301,4 +329,5 @@ if __name__ == "__main__":
             model_id,
             video_paths,
             meta_data,
+            slide_meta_data,
         )
