@@ -2,12 +2,20 @@ from pathlib import Path
 import pandas as pd
 from ast import literal_eval
 from collections import defaultdict
+import os
+
+
+def toxicainment_data_folder() -> Path:
+    dss_home = os.environ["DSS_HOME"]
+    return Path(dss_home) / "toxicainment"
+
 
 def get_posts():
     videos = {}
     slides = defaultdict(list)
-    media_dir = Path(__file__).parent / "media"
-    posts_df = pd.read_csv("./media_metadata.csv")
+    folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
+    media_dir = folder / "media"
+    posts_df = pd.read_csv(folder / "media_metadata.csv")
     posts_df["filenames"] = (
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )  

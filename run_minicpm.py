@@ -13,7 +13,7 @@ import duckdb
 from decord import VideoReader, cpu
 from download import DATASET_PATH, MP4_DATASET_PATH
 from collections import defaultdict
-from utils import get_posts
+from utils import get_posts, toxicainment_data_folder
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -81,7 +81,8 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     ## pass metadata for slides
     ## a function to batch slide_paths after VideoReader processing + mp3 paths
 
-    with open("prompt.txt", "r") as f:
+    folder = toxicainment_data_folder()
+    with open(folder / "prompt.txt", "r") as f:
         data = f.read()
 
     prompt_text = "".join(data)
