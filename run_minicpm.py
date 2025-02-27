@@ -14,6 +14,7 @@ from decord import VideoReader, cpu
 from download import DATASET_PATH, MP4_DATASET_PATH
 from collections import defaultdict
 from utils import get_posts, toxicainment_data_folder
+from utils import get_posts, batch_slides
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -75,18 +76,17 @@ def fill_prompt(meta_data, prompt):
     filled = prompt % (slide_desc, slide_author)
     return filled
 
-def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_data, slide_meta_data):
-
-    ## TODO:
-    ## pass metadata for slides
-    ## a function to batch slide_paths after VideoReader processing + mp3 paths
+def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_data, slide_meta_data, slides_list):
 
     folder = toxicainment_data_folder()
     with open(folder / "prompt.txt", "r") as f:
         data = f.read()
 
     prompt_text = "".join(data)
-    filled_prompt = fill_prompt(meta_data, prompt_text)
+    if config["slide"]:
+        filled_prompt = fill_prompt(slide_meta_data, prompt_text)
+    else:
+        filled_prompt = fill_prompt(meta_data, prompt_text)
     
     # Say hello to your function :)
     MAX_NUM_FRAMES = 64
@@ -96,39 +96,53 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     author = meta_data["author_name"]
     video = meta_data["video_description"]
 
+    s_author = slide_meta_data["author_name"]
+    s_desc = slide_meta_data["video_description"]
+    
+    frames = []
+    for idx, slide_data in batched_slides.items():  
+            frames.append({"slide_id": idx, 
+                "frames": slide_data["frames"]})
+    
+    #breakpoint()
 
-    try:
-        vr = VideoReader(str(video_path), ctx=cpu(0))
-        total = []
-        total_frames = len(vr)
-        for i in vr:
-            total.append(i)
-        
-        print(f"Total Frames: {total_frames}")
-        fps = vr.get_avg_fps()
-        print(f"FPS: {fps}")
-        total_frames_int = int(total_frames)
-        print(f"total transformed: {total_frames_int}")
-        if total_frames <= 6000:
-            frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
-            print(f"frame indices: {frame_indices}")
-            print(f"total frames passed(fps): {len(frame_indices)}")
 
-        elif total_frames > 6000:
-            total_fps = total[:6000]
-            total_uni = total[6000:]
-            # total uni starts from zero since it's newly created even tough frames after 4000 are added
-            frame_indices = fps_sample(int(len(total_fps)), round(fps), range(len(total_fps)))
-            frame_indices_uni = uniform_sample(range(len(total_uni)), MAX_NUM_FRAMES)
-            print(f"frame indices_fps: {frame_indices}")
-            print(f"total frames passed(fps): {len(frame_indices)}")
-            print(f"frame indices_uni: {frame_indices_uni}")
-            print(f"total frames passed(uni): {len(frame_indices_uni)}")
-        
-        frames = vr.get_batch(frame_indices).asnumpy()
-        frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
-    except Exception as e:
-        raise ValueError(f"Error processing video: {e}") from e
+    ## TODO:
+    ## messes up video_paths / should be checked for correctness
+    ## cannot iter over dict object next(meta_slides)
+    if not config["slide"]:
+        try:
+            vr = VideoReader(str(video_path), ctx=cpu(0))
+            total = []
+            total_frames = len(vr)
+            for i in vr:
+                total.append(i)
+            
+            print(f"Total Frames: {total_frames}")
+            fps = vr.get_avg_fps()
+            print(f"FPS: {fps}")
+            total_frames_int = int(total_frames)
+            print(f"total transformed: {total_frames_int}")
+            if total_frames <= 6000:
+                frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
+                print(f"frame indices: {frame_indices}")
+                print(f"total frames passed(fps): {len(frame_indices)}")
+
+            elif total_frames > 6000:
+                total_fps = total[:6000]
+                total_uni = total[6000:]
+                # total uni starts from zero since it's newly created even tough frames after 4000 are added
+                frame_indices = fps_sample(int(len(total_fps)), round(fps), range(len(total_fps)))
+                frame_indices_uni = uniform_sample(range(len(total_uni)), MAX_NUM_FRAMES)
+                print(f"frame indices_fps: {frame_indices}")
+                print(f"total frames passed(fps): {len(frame_indices)}")
+                print(f"frame indices_uni: {frame_indices_uni}")
+                print(f"total frames passed(uni): {len(frame_indices_uni)}")
+            
+            frames = vr.get_batch(frame_indices).asnumpy()
+            frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
+        except Exception as e:
+            raise ValueError(f"Error processing video: {e}") from e
 
     tokens_generated = 0
     num_videos = 0
@@ -152,7 +166,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
             msgs = [
             {
                 "role": "user",
-                "content": [prompt] + frames
+                "content": [prompt] + frames[0]["frames"]
             }
             ]
 
@@ -176,7 +190,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
 
 
-def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
+def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data, batched_slides):
     print(f"Initializing model '{model_id}'...")
     model = load_model(model_id, config)
 
@@ -184,6 +198,16 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
     if config["compile"]:
         model = torch.compile(model)
+
+    if config["slide"]:
+        slides_list = []
+        for idx, slide_data in batched_slides.items():  
+            for video_path in slide_data["slide_path"]:
+                slides_list.append({
+                "slide_id": idx,  
+                "video_path": video_path,  
+                "frames": slide_data["frames"]
+            })
 
     results = []
     total_runtime = 0
@@ -197,19 +221,22 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     current_video = ""
     
     meta_iter = metadata_generator(meta_data)
+    meta_slides = metadata_generator(slide_meta_data)
 
     for video_path in tqdm(video_paths, desc="Benchmarking models"):
         print(f"\nProcessing: {video_path}")
+
         start_time = time.time()
         
         meta = next(meta_iter)
+        meta_slides = next(meta_slides)
         current_video += video_path + ";"
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
         tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
-            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta, slide_meta_data
+            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta, meta_slides, slides_list
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -319,16 +346,18 @@ if __name__ == "__main__":
 
         slide_meta_data.append({
         "author_name": slide_info["author_name"],
-        "slide_description": slide_info["slide_description"]
+        "video_description": slide_info["slide_description"]
        })
 
+    batched_slides = batch_slides(slides)
 
     for model_id in config["models"]:
-        print("Benchmarking videos...")
+        print("Benchmarking models...")
         benchmark_videos(
             config,
             model_id,
             video_paths,
             meta_data,
             slide_meta_data,
+            batched_slides
         )

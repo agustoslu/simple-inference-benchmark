@@ -13,6 +13,7 @@ output_token_limit: 120
 hf_token: !ENV ${HF_TOKEN}
 home_dir: !ENV ${HOME}
 seed: 42
+slide: True
 compile: False # activate torch.compile()
 # avoid_cache: False (TODO: place some random characters into prompt to avoid cache)
 models:
