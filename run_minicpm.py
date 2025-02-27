@@ -5,15 +5,12 @@ from datetime import datetime
 import random
 import csv
 import torch
-from PIL import Image
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
 import duckdb
-from decord import VideoReader, cpu
 from download import DATASET_PATH, MP4_DATASET_PATH
-from collections import defaultdict
-from utils import get_posts, toxicainment_data_folder
+from utils import get_posts, toxicainment_data_folder, video_to_frames
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -40,15 +37,6 @@ def sample_n_videos(n: int, seed: int):
 
     return video_paths
 
-# Employ uniform sampling for frames
-def uniform_sample(xs, n):
-    gap = len(xs) / n
-    idxs = [int(i * gap + gap / 2) for i in range(n)]
-    return [xs[i] for i in idxs]
-
-def fps_sample(xs, fps, total_range): 
-    idxs = [i * fps for i in range(xs // fps)]
-    return [total_range[i] for i in idxs]
 
 def load_model(model_id: str, config: dict):
     """Loads model from huggingface"""
@@ -87,46 +75,9 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
 
     prompt_text = "".join(data)
     filled_prompt = fill_prompt(meta_data, prompt_text)
-    
-    # Say hello to your function :)
-    MAX_NUM_FRAMES = 64
-    frame_indices = []
-    
-    # pass metadata, we get each instance inside benchmark_videos using generator
-    author = meta_data["author_name"]
-    video = meta_data["video_description"]
-
 
     try:
-        vr = VideoReader(str(video_path), ctx=cpu(0))
-        total = []
-        total_frames = len(vr)
-        for i in vr:
-            total.append(i)
-        
-        print(f"Total Frames: {total_frames}")
-        fps = vr.get_avg_fps()
-        print(f"FPS: {fps}")
-        total_frames_int = int(total_frames)
-        print(f"total transformed: {total_frames_int}")
-        if total_frames <= 6000:
-            frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
-            print(f"frame indices: {frame_indices}")
-            print(f"total frames passed(fps): {len(frame_indices)}")
-
-        elif total_frames > 6000:
-            total_fps = total[:6000]
-            total_uni = total[6000:]
-            # total uni starts from zero since it's newly created even tough frames after 4000 are added
-            frame_indices = fps_sample(int(len(total_fps)), round(fps), range(len(total_fps)))
-            frame_indices_uni = uniform_sample(range(len(total_uni)), MAX_NUM_FRAMES)
-            print(f"frame indices_fps: {frame_indices}")
-            print(f"total frames passed(fps): {len(frame_indices)}")
-            print(f"frame indices_uni: {frame_indices_uni}")
-            print(f"total frames passed(uni): {len(frame_indices_uni)}")
-        
-        frames = vr.get_batch(frame_indices).asnumpy()
-        frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
+        frames = video_to_frames(video_path)
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 

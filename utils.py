@@ -3,6 +3,8 @@ import pandas as pd
 from ast import literal_eval
 from collections import defaultdict
 import os
+from decord import VideoReader, cpu
+from PIL import Image
 
 
 def toxicainment_data_folder() -> Path:
@@ -71,3 +73,46 @@ def get_labels():
     print(f"saved to {merged}")
 
     return merged_df
+
+def video_to_frames(video_path: Path):
+    MAX_NUM_FRAMES = 64
+    vr = VideoReader(str(video_path), ctx=cpu(0))
+    total = []
+    total_frames = len(vr)
+    for i in vr:
+        total.append(i)
+        
+    print(f"Total Frames: {total_frames}")
+    fps = vr.get_avg_fps()
+    print(f"FPS: {fps}")
+    total_frames_int = int(total_frames)
+    print(f"total transformed: {total_frames_int}")
+    if total_frames <= 6000:
+        frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
+        print(f"frame indices: {frame_indices}")
+        print(f"total frames passed(fps): {len(frame_indices)}")
+
+    elif total_frames > 6000:
+        total_fps = total[:6000]
+        total_uni = total[6000:]
+            # total uni starts from zero since it's newly created even tough frames after 4000 are added
+        frame_indices = fps_sample(int(len(total_fps)), round(fps), range(len(total_fps)))
+        frame_indices_uni = uniform_sample(range(len(total_uni)), MAX_NUM_FRAMES)
+        print(f"frame indices_fps: {frame_indices}")
+        print(f"total frames passed(fps): {len(frame_indices)}")
+        print(f"frame indices_uni: {frame_indices_uni}")
+        print(f"total frames passed(uni): {len(frame_indices_uni)}")
+        
+    frames = vr.get_batch(frame_indices).asnumpy()
+    frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
+    return frames
+
+# Employ uniform sampling for frames
+def uniform_sample(xs, n):
+    gap = len(xs) / n
+    idxs = [int(i * gap + gap / 2) for i in range(n)]
+    return [xs[i] for i in idxs]
+
+def fps_sample(xs, fps, total_range): 
+    idxs = [i * fps for i in range(xs // fps)]
+    return [total_range[i] for i in idxs]
