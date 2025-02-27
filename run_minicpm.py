@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 from datetime import datetime
 import random
-import csv
+import pandas as pd
 import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
@@ -92,7 +92,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     try:
         for _ in range(num_samples):
             generation_config = {
-                "max_new_tokens": 250,
+                "max_new_tokens": 512,
                 "sampling": False,
                 "stream": False,
                 "max_inp_length":8192*7,
@@ -185,50 +185,58 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         total_queries += num_videos
         total_tokens += tokens_generated
 
-    vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
-    tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
-    tpq = total_tokens / total_queries if total_queries > 0 else 0
-    video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
+        tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
+        tpq = total_tokens / total_queries if total_queries > 0 else 0
+        video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    results.append({
-            "Timestamp": video_saved,
-            "Model ID": model_id,
-            "Total_Runtime": total_runtime,
-            "Model_Runtime": total_model_runtime,
-            "Extra_Runtime": total_extra_runtime,
-            "VPS": vps,
-            "TPS": tps,
-            "TPQ": tpq,
-            "Peak_Memory_Allocated": global_peak_memory_allocated,
-            "Peak_Memory_Reserved": global_peak_memory_reserved,
-            "Processed_Video": current_video,
-            "Generations": generations,
-    })
+        row = {
+                "Timestamp": video_saved,
+                "Model ID": model_id,
+                "Total_Runtime": total_runtime,
+                "Model_Runtime": total_model_runtime,
+                "Extra_Runtime": total_extra_runtime,
+                "VPS": vps,
+                "TPS": tps,
+                "TPQ": tpq,
+                "Peak_Memory_Allocated": global_peak_memory_allocated,
+                "Peak_Memory_Reserved": global_peak_memory_reserved,
+                "Processed_Video": current_video,
+                "Generations": generations,
+        }
 
-    csv_file = "toxicainment_videos_log.csv"
-    csv_header = [
-        "Timestamp",
-        "Model ID",
-        "Total_Runtime",
-        "Model_Runtime",
-        "Extra_Runtime",
-        "VPS",
-        "TPS",
-        "TPQ",
-        "Peak_Memory_Allocated",
-        "Peak_Memory_Reserved",
-        "Proccessed_Video",
-        "Generations",
-    ]
-    
-    file_exists = os.path.exists(csv_file)
+        csv_file = "toxicainment_videos_log.csv"
+        row = pd.DataFrame([row])
+        
 
-    with open(csv_file, mode="a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=csv_header)
-        if not file_exists:
-            writer.writeheader()
-        for result in results:
-            writer.writerow(result)
+        if os.path.exists(csv_file):
+            row.to_csv(csv_file, mode="a", header=False, index=False)
+        else:
+            csv_header = [
+            "Timestamp",
+            "Model ID",
+            "Total_Runtime",
+            "Model_Runtime",
+            "Extra_Runtime",
+            "VPS",
+            "TPS",
+            "TPQ",
+            "Peak_Memory_Allocated",
+            "Peak_Memory_Reserved",
+            "Proccessed_Video",
+            "Generations",
+        ]
+            row.to_csv(csv_file, mode="a", header=csv_header, index=False)
+        
+        print("added line to csv")
+   
+
+    # with open(csv_file, mode="a", newline="") as f:
+    #     writer = csv.DictWriter(f, fieldnames=csv_header)
+    #     if not file_exists:
+    #         writer.writeheader()
+    #     for result in results:
+    #         writer.writerow(result)
 
     print("\nBenchmark Summary:")
     print(f"  Total Runtime: {total_runtime:.2f}s")
