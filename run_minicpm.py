@@ -77,7 +77,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
-        frames = video_to_frames(video_path)
+        frames, total_frames = video_to_frames(video_path)
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 
@@ -124,7 +124,7 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     num_videos += 1
     extra_runtime += time.time() - start_extra_time
 
-    return tokens_generated, num_videos, model_runtime, extra_runtime, global_res
+    return tokens_generated, num_videos, model_runtime, extra_runtime, global_res, total_frames
 
 
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
@@ -142,6 +142,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     total_extra_runtime = 0
     total_queries = 0
     total_tokens = 0
+    global_frame_count = 0
     global_peak_memory_allocated = 0
     global_peak_memory_reserved = 0
     generations = ""
@@ -159,7 +160,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
-        tokens_generated, num_videos, model_runtime, extra_runtime, global_res = process_video(
+        tokens_generated, num_videos, model_runtime, extra_runtime, global_res, total_frames = process_video(
             video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta, slide_meta_data
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
@@ -184,10 +185,8 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         total_extra_runtime += extra_runtime
         total_queries += num_videos
         total_tokens += tokens_generated
+        global_frame_count += total_frames
 
-        vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
-        tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
-        tpq = total_tokens / total_queries if total_queries > 0 else 0
         video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         row = {
@@ -196,9 +195,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
                 "Total_Runtime": total_runtime,
                 "Model_Runtime": total_model_runtime,
                 "Extra_Runtime": total_extra_runtime,
-                "VPS": vps,
-                "TPS": tps,
-                "TPQ": tpq,
+                "Total_Frames": total_frames,
                 "Peak_Memory_Allocated": global_peak_memory_allocated,
                 "Peak_Memory_Reserved": global_peak_memory_reserved,
                 "Processed_Video": current_video,
@@ -218,25 +215,19 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             "Total_Runtime",
             "Model_Runtime",
             "Extra_Runtime",
-            "VPS",
-            "TPS",
-            "TPQ",
+            "Total_Frames",
             "Peak_Memory_Allocated",
             "Peak_Memory_Reserved",
-            "Proccessed_Video",
+            "Processed_Video",
             "Generations",
         ]
             row.to_csv(csv_file, mode="a", header=csv_header, index=False)
         
         print("added line to csv")
    
-
-    # with open(csv_file, mode="a", newline="") as f:
-    #     writer = csv.DictWriter(f, fieldnames=csv_header)
-    #     if not file_exists:
-    #         writer.writeheader()
-    #     for result in results:
-    #         writer.writerow(result)
+    vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
+    tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
+    tpq = total_tokens / total_queries if total_queries > 0 else 0
 
     print("\nBenchmark Summary:")
     print(f"  Total Runtime: {total_runtime:.2f}s")
@@ -245,6 +236,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     print(f"  Tokens per Query (TPQ): {tpq:.2f}")
     print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
     print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
+    print(f"  Total Number of Frames(All Videos): {global_frame_count}")
 
     torch.cuda.reset_peak_memory_stats()
     
@@ -287,7 +279,7 @@ if __name__ == "__main__":
         benchmark_videos(
             config,
             model_id,
-            video_paths,
+            video_paths[:2],
             meta_data,
             slide_meta_data,
         )
