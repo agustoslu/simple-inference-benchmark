@@ -105,7 +105,7 @@ def video_to_frames(video_path: Path):
         
     frames = vr.get_batch(frame_indices).asnumpy()
     frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
-    return frames
+    return frames, total_frames
 
 # Employ uniform sampling for frames
 def uniform_sample(xs, n):
