@@ -5,12 +5,12 @@ from collections import defaultdict
 import os
 from decord import VideoReader, cpu
 from PIL import Image
-
+import json
+import re
 
 def toxicainment_data_folder() -> Path:
     dss_home = os.environ["DSS_HOME"]
     return Path(dss_home) / "toxicainment"
-
 
 def get_posts():
     videos = {}
@@ -116,3 +116,44 @@ def uniform_sample(xs, n):
 def fps_sample(xs, fps, total_range): 
     idxs = [i * fps for i in range(xs // fps)]
     return [total_range[i] for i in idxs]
+
+# Parsing output
+
+def extract_json(text):
+    matches = re.findall(r'```json\n(.*?)```', text, re.DOTALL)
+    return [json.loads(m) for m in matches if m.strip()]
+
+def get_post_id(post_id):
+    return post_id.split('/')[-1].replace('.mp4', '').strip(';')
+
+def parse_output(log_path, model_labels_csv, model_id):
+    df = pd.read_csv(log_path, delimiter=',', encoding='utf-8')
+    model_labels = []
+      
+    videos, _ = get_posts()
+    
+    video_meta = {Path(v["video_path"]).name.replace(".mp4", ""): v["author_name"] for v in videos.values()}
+
+    for i in df.index:
+        raw_post_id = df.loc[i, "Processed_Video"]
+        generation = df.loc[i, "Generations"]
+        
+        post_id = get_post_id(raw_post_id)
+        author_name = video_meta.get(post_id, "NA")
+        
+        json_blocks = extract_json(generation)
+        if not json_blocks:
+            print(f"Skipping post_id {post_id}: No valid JSON found.")
+            continue
+        
+        answer_block = json_blocks[0]
+        answers_dict = {}
+        for item in answer_block.get("answers", []):
+            question = item["question"]
+            answers_dict[f"{question}"] = item["answer"]
+            answers_dict[f"{question}_comment"] = item.get("comment", "")
+        model_labels.append({"post_id": post_id, "author": author_name, "classification_by": model_id, **answers_dict})
+        
+    pd.DataFrame(model_labels).to_csv(model_labels_csv, index=False)
+    print(f"Model labels saved to {model_labels_csv}")
+    return model_labels_csv

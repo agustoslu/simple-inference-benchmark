@@ -10,7 +10,7 @@ from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH
-from utils import get_posts, toxicainment_data_folder, video_to_frames
+from utils import get_posts, toxicainment_data_folder, video_to_frames, parse_output
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -229,6 +229,10 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
     tpq = total_tokens / total_queries if total_queries > 0 else 0
 
+
+    model_labels_csv = f"model_labels_{model_id.replace('/', '_')}.csv"
+    parse_output(csv_file, model_labels_csv, model_id)
+
     print("\nBenchmark Summary:")
     print(f"  Total Runtime: {total_runtime:.2f}s")
     print(f"  Videos per Second (VPS): {vps:.2f}")
@@ -275,7 +279,7 @@ if __name__ == "__main__":
 
 
     for model_id in config["models"]:
-        print("Benchmarking videos...")
+        print("Benchmarking models...")
         benchmark_videos(
             config,
             model_id,
