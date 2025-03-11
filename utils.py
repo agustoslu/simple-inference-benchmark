@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 import pandas as pd
 from ast import literal_eval
@@ -7,6 +8,7 @@ from decord import VideoReader, cpu
 from PIL import Image
 import json
 import re
+
 
 def toxicainment_data_folder() -> Path:
     dss_home = os.environ["DSS_HOME"]
@@ -76,36 +78,14 @@ def get_labels():
 
 def video_to_frames(video_path: Path):
     vr = VideoReader(str(video_path), ctx=cpu(0))
-    total = []
-    total_frames = len(vr)
-    for i in vr:
-        total.append(i)
-        
-    print(f"Total Frames: {total_frames}")
-    fps = vr.get_avg_fps()
-    print(f"FPS: {fps}")
-    if total_frames <= 6000:
-        frame_indices = fps_sample(int(total_frames), round(fps), range(total_frames))
-        print(f"frame indices: {frame_indices}")
-        print(f"total frames passed(fps): {len(frame_indices)}")
-
-    elif total_frames > 6000:
-        total_fps = total[:6000]
-        frame_indices = fps_sample(int(len(total_fps)), round(fps), range(len(total_fps)))
-        
+    frame_indices = compute_frame_indices(
+        vid_n_frames=len(vr), 
+        vid_fps=vr.get_avg_fps(), 
+        max_n_frames=200
+    )    
     frames = vr.get_batch(frame_indices).asnumpy()
     frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
-    return frames, total_frames
-
-# Employ uniform sampling for frames
-def uniform_sample(xs, n):
-    gap = len(xs) / n
-    idxs = [int(i * gap + gap / 2) for i in range(n)]
-    return [xs[i] for i in idxs]
-
-def fps_sample(xs, fps, total_range): 
-    idxs = [i * fps for i in range(xs // fps)]
-    return [total_range[i] for i in idxs]
+    return frames
 
 # Parsing output
 
@@ -147,3 +127,18 @@ def parse_output(log_path, model_labels_csv, model_id):
     pd.DataFrame(model_labels).to_csv(model_labels_csv, index=False)
     print(f"Model labels saved to {model_labels_csv}")
     return model_labels_csv
+
+
+def compute_frame_indices(vid_n_frames: int, vid_fps: float, max_n_frames: int):
+    """
+    This function will return the frames starting at 0 every second.
+    Unless that number exceeds max_n_frames, in which case it will return max_n_frames frames evenly spaced out, starting at 0.
+    """
+    assert isinstance(vid_n_frames, int), vid_n_frames
+    assert isinstance(max_n_frames, int), max_n_frames
+    vid_fps = int(vid_fps)
+    fps_n_frames = math.ceil(vid_n_frames / vid_fps)
+    if fps_n_frames <= max_n_frames:
+        return list(range(0, vid_n_frames - 1, vid_fps))
+    else:
+        return list(range(0, vid_n_frames - 1, vid_n_frames // max_n_frames))

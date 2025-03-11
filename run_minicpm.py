@@ -77,7 +77,7 @@ def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_me
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
-        frames, _ = video_to_frames(video_path)
+        frames = video_to_frames(video_path)
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 
@@ -148,6 +148,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             "Model ID": model_id,
             "Total_Runtime": video_runtime,
             "Model_Runtime": model_runtime,
+            "Tokens_Generated": tokens_generated,
             "Total_Frames": total_frames,
             "Peak_Memory_Allocated": peak_memory_allocated,
             "Peak_Memory_Reserved": peak_memory_reserved,
