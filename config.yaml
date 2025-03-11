@@ -7,9 +7,7 @@ token_settings:
   - 60
   - 90
   - 120
-num_samples: 1
-num_videos: 5
-output_token_limit: 120
+output_token_limit: 512
 hf_token: !ENV ${HF_TOKEN}
 home_dir: !ENV ${HOME}
 seed: 42

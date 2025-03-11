@@ -63,7 +63,7 @@ def fill_prompt(meta_data, prompt):
     filled = prompt % (slide_desc, slide_author)
     return filled
 
-def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_data, slide_meta_data):
+def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_meta_data):
 
     ## TODO:
     ## pass metadata for slides
@@ -77,54 +77,33 @@ def process_video(video_path, token_limit, num_samples, model, tokenizer, meta_d
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
-        frames, total_frames = video_to_frames(video_path)
+        frames, _ = video_to_frames(video_path)
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 
-    tokens_generated = 0
-    num_videos = 0
-    model_runtime = 0
-    extra_runtime = 0
-    global_res = ""
-
     # Model inference
+    generation_config = {
+        "max_new_tokens": token_limit,
+        "sampling": False,
+        "stream": False,
+        "max_inp_length":8192*7,
+        "temperature": 0, 
+    }
+
+    msgs = [{"role": "user", "content": [filled_prompt] + frames}]
+
     start_model_time = time.time()
     try:
-        for _ in range(num_samples):
-            generation_config = {
-                "max_new_tokens": 512,
-                "sampling": False,
-                "stream": False,
-                "max_inp_length":8192*7,
-                "temperature": 0, 
-            }
-
-            prompt = filled_prompt
-            msgs = [
-            {
-                "role": "user",
-                "content": [prompt] + frames
-            }
-            ]
-
-            res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
-            global_res += res
-
-            print(f"Generated Text for Video: {res}")
+        res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
+        print(f"Generated Text for Video: {res}")
 
     except Exception as e:
         raise ValueError(f"Error generating for video: {e}") from e
 
-    model_runtime += time.time() - start_model_time
-
-    # Calculate time for additional operations
-    start_extra_time = time.time()
-    num_tokens = len(tokenizer.tokenize(res))
-    tokens_generated += num_tokens
-    num_videos += 1
-    extra_runtime += time.time() - start_extra_time
-
-    return tokens_generated, num_videos, model_runtime, extra_runtime, global_res, total_frames
+    model_runtime = time.time() - start_model_time
+    tokens_generated = len(tokenizer.tokenize(res))
+    n_frames_used = len(frames)
+    return tokens_generated, model_runtime, res, n_frames_used
 
 
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
@@ -139,7 +118,6 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     results = []
     total_runtime = 0
     total_model_runtime = 0
-    total_extra_runtime = 0
     total_queries = 0
     total_tokens = 0
     global_frame_count = 0
@@ -160,8 +138,8 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
-        tokens_generated, num_videos, model_runtime, extra_runtime, global_res, total_frames = process_video(
-            video_path, config["output_token_limit"], config["num_samples"], model, tokenizer, meta, slide_meta_data
+        tokens_generated, model_runtime, global_res, total_frames = process_video(
+            video_path, config["output_token_limit"], model, tokenizer, meta, slide_meta_data
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -176,14 +154,11 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         print(f"Finished {os.path.basename(video_path)}")
         print(f"  Total Runtime: {video_runtime:.2f}s")
         print(f"  Model Runtime: {model_runtime:.2f}s")
-        print(f"  Extra Operations Runtime: {extra_runtime:.2f}s")
         print(f"  Tokens Generated: {tokens_generated}")
-        print(f"  Queries Made/Processed Videos: {num_videos}")
 
         total_runtime += video_runtime
         total_model_runtime += model_runtime
-        total_extra_runtime += extra_runtime
-        total_queries += num_videos
+        total_queries += 1
         total_tokens += tokens_generated
         global_frame_count += total_frames
 
@@ -194,7 +169,6 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
                 "Model ID": model_id,
                 "Total_Runtime": total_runtime,
                 "Model_Runtime": total_model_runtime,
-                "Extra_Runtime": total_extra_runtime,
                 "Total_Frames": total_frames,
                 "Peak_Memory_Allocated": global_peak_memory_allocated,
                 "Peak_Memory_Reserved": global_peak_memory_reserved,
@@ -214,7 +188,6 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             "Model ID",
             "Total_Runtime",
             "Model_Runtime",
-            "Extra_Runtime",
             "Total_Frames",
             "Peak_Memory_Allocated",
             "Peak_Memory_Reserved",
