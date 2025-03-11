@@ -10,7 +10,7 @@ from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH
-from utils import get_posts, toxicainment_data_folder, video_to_frames, parse_output
+from utils import get_posts, toxicainment_data_folder, video_to_frames
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -115,17 +115,6 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     if config["compile"]:
         model = torch.compile(model)
 
-    results = []
-    total_runtime = 0
-    total_model_runtime = 0
-    total_queries = 0
-    total_tokens = 0
-    global_frame_count = 0
-    global_peak_memory_allocated = 0
-    global_peak_memory_reserved = 0
-    generations = ""
-    current_video = ""
-    
     meta_iter = metadata_generator(meta_data)
 
     for video_path in tqdm(video_paths, desc="Benchmarking models"):
@@ -133,19 +122,15 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         start_time = time.time()
         
         meta = next(meta_iter)
-        current_video += video_path + ";"
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
-        tokens_generated, model_runtime, global_res, total_frames = process_video(
+        tokens_generated, model_runtime, response, total_frames = process_video(
             video_path, config["output_token_limit"], model, tokenizer, meta, slide_meta_data
         )
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
-        global_peak_memory_allocated = max(global_peak_memory_allocated, peak_memory_allocated)
-        global_peak_memory_reserved = max(global_peak_memory_reserved, peak_memory_reserved)
-        generations += global_res + ";"
 
         video_runtime = time.time() - start_time
 
@@ -156,24 +141,18 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         print(f"  Model Runtime: {model_runtime:.2f}s")
         print(f"  Tokens Generated: {tokens_generated}")
 
-        total_runtime += video_runtime
-        total_model_runtime += model_runtime
-        total_queries += 1
-        total_tokens += tokens_generated
-        global_frame_count += total_frames
-
         video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         row = {
-                "Timestamp": video_saved,
-                "Model ID": model_id,
-                "Total_Runtime": total_runtime,
-                "Model_Runtime": total_model_runtime,
-                "Total_Frames": total_frames,
-                "Peak_Memory_Allocated": global_peak_memory_allocated,
-                "Peak_Memory_Reserved": global_peak_memory_reserved,
-                "Processed_Video": current_video,
-                "Generations": generations,
+            "Timestamp": video_saved,
+            "Model ID": model_id,
+            "Total_Runtime": video_runtime,
+            "Model_Runtime": model_runtime,
+            "Total_Frames": total_frames,
+            "Peak_Memory_Allocated": peak_memory_allocated,
+            "Peak_Memory_Reserved": peak_memory_reserved,
+            "Processed_Video": video_path,
+            "Generations": response,
         }
 
         results_file = "toxicainment_videos_log.jsonl"
@@ -182,25 +161,8 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         row.to_json(results_file, orient="records", lines=True, mode="a")
         print(f"added line to {results_file}")
    
-    vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
-    tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
-    tpq = total_tokens / total_queries if total_queries > 0 else 0
-
-
-    model_labels_csv = f"model_labels_{model_id.replace('/', '_')}.csv"
-    # parse_output(csv_file, model_labels_csv, model_id)
-
-    print("\nBenchmark Summary:")
-    print(f"  Total Runtime: {total_runtime:.2f}s")
-    print(f"  Videos per Second (VPS): {vps:.2f}")
-    print(f"  Tokens per Second (TPS): {tps:.2f}")
-    print(f"  Tokens per Query (TPQ): {tpq:.2f}")
-    print(f"  Global Peak Memory Allocated: {global_peak_memory_allocated:.3f} GB")
-    print(f"  Global Peak Memory Reserved: {global_peak_memory_reserved:.3f} GB")
-    print(f"  Total Number of Frames(All Videos): {global_frame_count}")
 
     torch.cuda.reset_peak_memory_stats()
-    
     return
 
 if __name__ == "__main__":
