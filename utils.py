@@ -127,7 +127,7 @@ def get_post_id(post_id):
     return post_id.split('/')[-1].replace('.mp4', '').strip(';')
 
 def parse_output(log_path, model_labels_csv, model_id):
-    df = pd.read_csv(log_path, delimiter=',', encoding='utf-8')
+    df = pd.read_json(log_path, orient='records', lines=True)
     model_labels = []
       
     videos, _ = get_posts()

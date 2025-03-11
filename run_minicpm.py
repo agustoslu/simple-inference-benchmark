@@ -176,27 +176,11 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
                 "Generations": generations,
         }
 
-        csv_file = "toxicainment_videos_log.csv"
+        results_file = "toxicainment_videos_log.jsonl"
         row = pd.DataFrame([row])
         
-
-        if os.path.exists(csv_file):
-            row.to_csv(csv_file, mode="a", header=False, index=False)
-        else:
-            csv_header = [
-            "Timestamp",
-            "Model ID",
-            "Total_Runtime",
-            "Model_Runtime",
-            "Total_Frames",
-            "Peak_Memory_Allocated",
-            "Peak_Memory_Reserved",
-            "Processed_Video",
-            "Generations",
-        ]
-            row.to_csv(csv_file, mode="a", header=csv_header, index=False)
-        
-        print("added line to csv")
+        row.to_json(results_file, orient="records", lines=True, mode="a")
+        print(f"added line to {results_file}")
    
     vps = total_queries / total_model_runtime if total_model_runtime > 0 else 0
     tps = total_tokens / total_model_runtime if total_model_runtime > 0 else 0
@@ -204,7 +188,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
 
     model_labels_csv = f"model_labels_{model_id.replace('/', '_')}.csv"
-    parse_output(csv_file, model_labels_csv, model_id)
+    # parse_output(csv_file, model_labels_csv, model_id)
 
     print("\nBenchmark Summary:")
     print(f"  Total Runtime: {total_runtime:.2f}s")
