@@ -3,6 +3,7 @@ simple-inference-benchmark/dataset
 dataset
 *.mp4
 
+profiles/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

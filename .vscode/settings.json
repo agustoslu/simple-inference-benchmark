@@ -1,0 +1,6 @@
+{
+    "search.exclude": {
+        ".ruff_cache": true,
+        "dataset/": true
+    }
+}
