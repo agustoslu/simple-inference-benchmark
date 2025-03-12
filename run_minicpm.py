@@ -11,6 +11,9 @@ from pyaml_env import parse_config
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH
 from utils import get_posts, toxicainment_data_folder, video_to_frames
+import argparse
+from pyinstrument import Profiler
+
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -166,12 +169,9 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     torch.cuda.reset_peak_memory_stats()
     return
 
-if __name__ == "__main__":
-
+def run_benchmark(n_examples=None, models=None) -> None:
     config = parse_config("./config.yaml")
-   
-    #print("Extracting videos from Parquet files...")
-    #video_paths = sample_n_videos(5, seed=42)
+
     print("ToxicAInment data used ...")
     videos, slides = get_posts()
     video_paths = []
@@ -197,13 +197,35 @@ if __name__ == "__main__":
         "slide_description": slide_info["slide_description"]
        })
 
+    if n_examples is None:
+        n_examples = len(video_paths)
+    
+    if models is None:
+        models = config["models"]
 
-    for model_id in config["models"]:
-        print("Benchmarking models...")
+    for model_id in models:
         benchmark_videos(
             config,
             model_id,
-            video_paths[:2],
-            meta_data,
-            slide_meta_data,
+            video_paths[:n_examples],
+            meta_data[:n_examples],
+            slide_meta_data[:n_examples],
         )
+
+def parse_command_line_args():
+    parser = argparse.ArgumentParser(description='Run MiniCPM benchmark')
+    parser.add_argument('--profile', action='store_true', default=False, help='Enable profiling')
+    args = parser.parse_args()
+    print(f"Profile: {args.profile}")
+    return args
+
+if __name__ == "__main__":
+    args = parse_command_line_args()
+    if args.profile:
+        profiler = Profiler(interval=0.01)
+        with profiler:
+            run_benchmark(n_examples=5, models=["openbmb/MiniCPM-V-2_6"])
+        os.makedirs("profiles", exist_ok=True)
+        profiler.write_html("profiles/minicpm_profile.html")
+    else:
+        run_benchmark(n_examples=2)  # 2 vids just to check everything runs
