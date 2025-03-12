@@ -10,10 +10,10 @@ from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH
-from utils import get_posts, toxicainment_data_folder, video_to_frames
+from utils import get_posts, video_to_frames
 import argparse
 from pyinstrument import Profiler
-
+import uuid
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -72,8 +72,7 @@ def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_me
     ## pass metadata for slides
     ## a function to batch slide_paths after VideoReader processing + mp3 paths
 
-    folder = toxicainment_data_folder()
-    with open(folder / "prompt.txt", "r") as f:
+    with open("./prompt.txt", "r") as f:
         data = f.read()
 
     prompt_text = "".join(data)
@@ -87,10 +86,10 @@ def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_me
     # Model inference
     generation_config = {
         "max_new_tokens": token_limit,
-        "sampling": False,
+        "sampling": True,
         "stream": False,
         "max_inp_length":8192*7,
-        "temperature": 0, 
+        # "temperature": 0,   # use defaults for MiniCPM
     }
 
     msgs = [{"role": "user", "content": [filled_prompt] + frames}]
@@ -110,6 +109,9 @@ def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_me
 
 
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
+    this_run = str(uuid.uuid4())
+    print(f"Run ID: {this_run}")
+    
     print(f"Initializing model '{model_id}'...")
     model = load_model(model_id, config)
 
@@ -147,6 +149,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         row = {
+            "Run_ID": this_run,
             "Timestamp": video_saved,
             "Model ID": model_id,
             "Total_Runtime": video_runtime,

@@ -1,0 +1,195 @@
+# Summary:
+Your task is to answer several questions about a single post on TikTok. You have information about the post and about the user who posted it, as well as the media files associated with the post and the user.
+For each questions, please provide a short comment/explanation in text form about the answer you chose. You can answer with 0 or multiple sentences, and you quote from the post or user information if useful.
+
+# Guidelines: The guidelines below are the codebook intended for the human labelers. As an LLM your task is to replicate the labels as human labelers would do.
+
+```markdown
+# PRE-FILTRING OF RELEVANT CONTENT
+
+## 1. General Information
+This step serves as a preliminary filter for relevant TikTok videos, which will later be analyzed in a qualitative multimodal content analysis. The videos were scraped with reference to the state elections in Saxony. The aim of this coding is to find relevant videos that 
+ are related to political topics (policy, politics or polity), b) are related to Saxony, c) contain intolerant elements and c) contain entertainment elements.
+The coding is carried out in the TikTok library created specifically for the project at: http://server-css.soziologie.uni-muenchen.de:8010/Deleted_Content
+After you have logged in, videos are automatically assigned to you and you can start coding. By clicking on “save” you will automatically be shown the next video.
+## 2. Strategies when encountering difficult content
+In the course of the coding process, intolerant content will be coded, i.e. content that expresses a denial of equality with others and a rejection of other perspectives, cultures or ideas. This might also include offensive language or threats of violence. It may also happen that you see videos that violate platform guidelines because they show content containing violence or otherwise violate (legal) norms.
+The following content may appear in the TikTok data:
+-	Videos, texts or audio elements that discriminate against and devalue social groups, e.g., migrants, women or members of the LGBTQIA+ community 
+-	Videos, texts or audio elements that contain threats against politicians and “dissidents”
+-	Videos, texts or audio elements that show and glorify far-right ideology 
+-	Videos, texts or audio elements that depict physical violence against people (e.g. terrorist attacks, war footage) and glorify them
+Coding such content can be exhausting and you might feel uncomfortable with some videos. In this case, you can stop the coding process at any time and report this back to us. Below are some additional strategies that may help you deal with difficult content:
+
+-	It is important to consciously distance yourself from intolerant and/or discriminatory content and to switch off the screen if necessary to protect yourself. Therefore, take breaks regularly. It could also be helpful to only code for a maximum of 1 hour at a time.
+-	Talking to trusted people can help you to process your own thoughts and feelings and to get support. Talk about the content and your challenges with friends or colleagues at any time!
+-	It can be helpful to develop black humor in order to process and put into perspective what you have seen. This is a completely normal blunting process that is okay and gives you distance from the coded content!
+-	Rituals such as tidying up, washing your hands, closing the door and leaving the room can help to symbolically separate everyday working life from stressful content. For example, it can be helpful to use a screen for coding, that you do not use privately (e.g. in the student’s room, second external screen, etc.)!
+-	The research we are doing with this project is highly relevant to society - sometimes it can help to remember the overarching purpose and goals of one's own work in order to reduce stress!
+-	You can get regular feedback from us on your progress so that you can see how much you have (already) achieved!
+-	Only a small proportion of internet users share intolerant ideas or extreme ideology. It is important to regularly recall these thoughts.
+-	Regular breaks for walks or sport can help you to distance yourself and clear your head.
+-	It can also help to set up a nice desktop background or coding environment to start coding with something positive!
+
+
+## 3. Coding instructions
+To code the TikTok videos, please watch the entire video and turn on the sound of your computer.
+It is important that you consider the textual, visual and audio elements when making your decision. 
+This includes:
+-	Text: video captions, emojis and hashtags but also the on-screen text within added textboxes or text that was photographed / filmed
+-	Visual: videos or images but also added emojis, stickers, GIFs 
+-	Audio: music and/or spoken text, sound elements and music / noises in the background(You may also use the transcription tool to simplify the process of fully recording spoken text)
+
+This does not include:
+-	Usernames (However, the username could provide contextual information that, when combined with other cues, might influence the coding (e.g., intolerant emojis or codes, such as “...88”).
+
+The codes described in the following can occur exclusively in one modality (e.g. only in text), or in several modalities simultaneously (e.g. in audio and visual material). It is also possible that the individual modalities alone do not fulfill the codes, but their combination with each other does (e.g., intolerance only becomes apparent through the combination of visual and audio elements).
+
+Some TikToks may contain ‘spam content,’ meaning that their message or intention is unclear (e.g., incoherent words or sentences, incomprehensible speech). While these cases are not relevant for the sample, they should be coded to the extent possible. However, please annotate such instances with the comment “unclear message” where appropriate. 
+
+### 3.1. Thematic reference politics
+| Question	| Does the video refer to political topics(policy, politics or polity)? |
+| ----------| ----------------------------------------------------------------------|
+| Explanation| = content that discuss, reference, or engage with topics, events, figures, or movements that refer to policy, political events or societal challenges |
+| ----------- | -----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Codes | 0 = no, 1 = yes |
+| ------| ------------------|
+| Additional Information | This might include: 
+- news and current political events, e.g., elections
+- political opinions and commentary by user, politicians, etc.
+- activism and advocacy, e.g., promotion of social or political causes, such as environmental activism, LGBTQ+ rights, etc.
+-	political figures and campaigns, e.g., featuring or discussing political figures, candidates, parties, and campaigns
+- 	satire and political memes 
+| ------| ------------------|
+| Open field for comments |
+
+### 3.2. Thematic reference Saxony
+| Question | = Does the video refer to Saxony? |
+| ---------- | ----------------------------------------------------------------------|
+| Explanation |	= content that refers to the federal state of Saxony in any way|
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Codes |	0 = no, 1 = yes |
+| ----------| ----------------------------------------------------------------------|
+| Additional Information |	This might include:
+-	politics in Saxony, including the state election in Saxony 
+-	politicians or celebrities from Saxony
+-	cities / landscape in Saxony
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Open field for comments |
+
+### 3.3. Intolerance
+We refer to Rossini’s (2029, 2022) conceptualization, which distinguishes intolerance from incivility. Our coding focuses exclusively on intolerant content, excluding merely uncivil or impolite expressions, such as insults directed at politicians.
+For interpreting (far-right) (group-)symbols, emojis, and codes, the attached list may be consulted. However, the mere presence of an extreme symbol, code, or emoji is not sufficient to code the TikTok as intolerant. It must be evident that the ideology is supported or endorsed.
+
+
+| Question | Does the video convey intolerance? |
+| ----------| ----------------------------------|
+| Explanation | = content that communicate the denial of an equal status with others and the refusal to accept different perspectives, cultures, or ideas, no matter what perspective it is, potentially even an intolerant one. |
+| ----------| ----------------------------------------------|
+| Codes | 0 = no, 1 = yes |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Additional Information | This code is manifested through expressionsof a hostile or discriminatory intent toward individuals or groups based on their social identities, preferences, or beliefs including: 
+-	expressions of exclusion 
+-	limiting people’s (social groups) rights or undermining participation / silencing 
+-	promotion of hostility towards what is seen as “other” or unfamiliar 
+-	promotion of discriminatory or derogatory speech / symbols
+-	Subtle or veiled forms of discrimination and derogatory generalizations targeting systematically discriminated groups (e.g., people of color, LGBTQIA+ community, women)
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Examples | 
+-	Textual Elements: captions, on-screen text, or hashtags that endorse / supportexclusionary and/or derogatory language towards certain groups, people or viewpoints, e.g., dehumanizing insults, code words that express extreme ideologyor support of an extreme group (see attached list)
+-	Visual Elements:endorsement / support ofsymbols or depictions that mock or demean specific groups, including exaggerated, stereotypical visual cues, or discriminatory symbols that convey exclusion or marginalization, e.g., symbols / signs / emojis that express extreme ideology
+-	Audio Elements: tone, choice of words, or sound effects / music that convey hostility or mockery, including harsh, condescending tones, discriminatory language, or background audio that underscores a sense of judgment or rejection of certain individuals or groups |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Open field for comments | Please always comment:
+-	Cases of intolerance against intolerance (e.g., intolerant attitude against far-right content)
+-	Any depiction of / reference to a (potentially intolerant) group or movement (listed or not) (e.g., “Junge Alternative”) |
+
+### 3.4. Entertainment
+We differentiate between two forms of entertainment: hedonic and eudaimonic; however, a video can simultaneously contain both!
+-	Any use of music is an indicator of entertainment, but can be hedonic and/or eudaimonic depending on the style and lyrics. 
+-	Any use of visual filters / effects(e.g., sparkling) or TikTokfeatures(e.g., greenscreen)is an indicator of entertainment, but can be hedonic and/or eudaimonic depending on the style. 
+-	Any use of emojis is an indicator for entertainment, but can be hedonic and/or eudaimonic. Emojis that cannot be clearly assigned, or that appear to lack an entertainment character at first glance, should still be classified as hedonic or eudaimonicand additionally noted in the comments.
+
+#### 3.4.1. Hedonic Entertainment
+
+| Question | Does the video convey hedonic entertainment? |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+|Explanation	| = content that convey entertainment through enjoyment, amusement, and pleasure
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Codes | 0 = no, 1 = yes |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Additional Information |	This code is manifested through hedonic entertainment cues that convey fun, humor, excitement, and pleasure (e.g., memes, sticker, emojis, music)
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Examples	| 
+- Textual Elements: Captions or on-screen text that use humor, slang, or lighthearted language aimed at amusement, such as jokes, punchlines, or exaggerated phrases; hashtags, emojis or symbols that add a lighthearted or humorous tone
+-	Visual Elements: Recordings of entertaining activities and events, such as theater performances, or sport competitions; bright colors, fast-paced cuts, and dynamic visual effectsand features / filter (e.g., sparkles, flashy transitions); Stickers, GIFs, Meme elements added to the video; playful facial expressions, animated gestures, or exaggerated movements that add humor or evoke joy
+-	Audio Elements: Upbeat music, catchy soundtracks, or sound effects that evoke excitement, laughter, or surprise (e.g., cartoon sound); lively or energetic voices; laughter, audience reactions; telling jokes |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Open field for comments | Please always comment:
+-	“unclear use of emojis”(e.g., flags or symbols without clear entertainment character) |
+
+#### 3.4.2. Eudaimonic Entertainment
+| Question |	Does the video convey eudaimonic entertainment? |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Explanation | = content that convey entertainment through inspiring, touching, thought-provoking, and meaningful elements |
+| Codes | 0 = no, 1 = yes |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Additional Information | This code is manifested through eudaimonic entertainment cues that convey appreciation of beauty and excellence, gratitude, hope, personal growth, or religiousness/spirituality (e.g., via music or visuals incl. nature or spiritual symbolsif theyform the main message) |
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Examples	| -	Textual Elements: Thought-provoking captions, hashtags, quotes, or questions that encourage meaningfulintrospection or convey moral messages/dilemma, signal reflection, growth, gratitude or empathy (e.g., ‘big’ questions that go beyond simply asking “How are you today”, such as “What truly matters in life?” or phrases like“Together, we are stronger”)
+-	Visual Elements: Soft or muted color tonesor video features / filter, slower visual transitions, or minimalist visuals that focus on conveying depth, depiction of beauty and excellence; Imagery of personal stories or social issues, such as vulnerability or resilience; intentional depiction ofsymbolic visuals like natural landscapes, sunsets, or architecturethat are not only part of the background; intentionalreferences to life/death experiences, and religious and spiritual symbols
+-	Audio Elements: Calm or inspiring music, instrumental tracks, or soothing tones; slower-paced, gentle voice tones that emphasize reflection or encourage contemplation: sounds associated with nature or other tranquil settings (e.g., waves, birdsong)
+| ----------| ----------------------------------------------------------------------------------------------------------------------------------|
+| Open field for comments | Please always comment:
+-	“unclear use of emojis” (e.g., flags or symbols without clear entertainment character) |
+```
+
+# Post/User Information
+Here is more information the post and the user who posted it:
+
+User information:
+%s
+
+Post information:
+%s
+
+# Files
+The provided files are either:
+1. a single mp4 file (video case), or 
+2. a slideshow of images plus an optional audio file (slideshow case).
+
+# Output Format
+Please provide your answers in a JSON format. The <answer> must be either "yes" or "no". See the format below.
+Please DO NOT include indentation or line breaks in your JSON to save output tokens.
+
+```json
+{
+    "answers": [
+        {
+            "question": "is_political",
+            "answer": "<answer>",
+            "comment": <comment>
+        },
+        {
+            "question": "is_saxony",
+            "answer": "<answer>",
+            "comment": <comment>
+        },
+        {
+            "question": "is_intolerant",
+            "answer": "<answer>",
+            "comment": <comment>
+        },
+        {
+            "question": "is_hedonic_entertainment",
+            "answer": "<answer>",
+            "comment": <comment>
+        },
+        {
+            "question": "is_eudaimonic_entartainment",
+            "answer": "<answer>",
+            "comment": <comment>
+        }
+    ]
+}
+```
