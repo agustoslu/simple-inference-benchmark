@@ -14,6 +14,7 @@ from utils import get_posts, video_to_frames
 import argparse
 from pyinstrument import Profiler
 import uuid
+import minicpm_omni
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -43,6 +44,8 @@ def sample_n_videos(n: int, seed: int):
 
 def load_model(model_id: str, config: dict):
     """Loads model from huggingface"""
+    if model_id == minicpm_omni.model_id:
+        return minicpm_omni.load_model()
     model = AutoModel.from_pretrained(
         model_id,
         trust_remote_code=True,

@@ -2,6 +2,7 @@
 simple-inference-benchmark/dataset
 dataset
 *.mp4
+*.wav
 
 profiles/
 
