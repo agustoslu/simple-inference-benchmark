@@ -89,21 +89,24 @@ def video_to_frames(video_path: Path):
 
 # Parsing output
 
-def extract_json(text):
-    matches = re.findall(r'```json\n(.*?)```', text, re.DOTALL)
-    return [json.loads(m) for m in matches if m.strip()]
-
 def get_post_id(post_id):
     return post_id.split('/')[-1].replace('.mp4', '').strip(';')
+
+def clean_json_string(json_string):
+    # json strings include markdown chars and that results in JSON decoding error if not cleaned
+    cleaned = re.sub(r'^```json\n?|```$', '', json_string.strip(), flags=re.MULTILINE)
+    return cleaned
 
 def parse_output(log_path, model_labels_csv, model_id):
     df = pd.read_json(log_path, orient='records', lines=True)
     model_labels = []
-      
-    videos, _ = get_posts()
+    unparsable_videos = []
     
+    videos, _ = get_posts()
     video_meta = {Path(v["video_path"]).name.replace(".mp4", ""): v["author_name"] for v in videos.values()}
-
+    
+    pattern = re.compile(r'(intolerant|intolerance|political|saxony|hedonic|eudaimonic)[:\s]*(Yes|No|1|0)', re.IGNORECASE)
+    
     for i in df.index:
         raw_post_id = df.loc[i, "Processed_Video"]
         generation = df.loc[i, "Generations"]
@@ -111,23 +114,40 @@ def parse_output(log_path, model_labels_csv, model_id):
         post_id = get_post_id(raw_post_id)
         author_name = video_meta.get(post_id, "NA")
         
-        json_blocks = extract_json(generation)
-        if not json_blocks:
-            print(f"Skipping post_id {post_id}: No valid JSON found.")
+        if not generation:
+            print(f"Skipping post_id {post_id}: No valid data found.")
+            unparsable_videos.append(post_id)
             continue
         
-        answer_block = json_blocks[0]
-        answers_dict = {}
-        for item in answer_block.get("answers", []):
-            question = item["question"]
-            answers_dict[f"{question}"] = item["answer"]
-            answers_dict[f"{question}_comment"] = item.get("comment", "")
-        model_labels.append({"post_id": post_id, "author": author_name, "classification_by": model_id, **answers_dict})
+        try:
+            cleaned_generation = clean_json_string(generation) if isinstance(generation, str) else generation
+            generation_data = json.loads(cleaned_generation) if isinstance(cleaned_generation, str) else generation
+        except json.JSONDecodeError:
+            print(f"Skipping post_id {post_id}: JSON decoding error.")
+            unparsable_videos.append(post_id)
+            continue
         
+        answers_dict = {}
+        
+        for item in generation_data.get("answers", []):
+            question = item["question"].lower()
+            response = str(item["answer"]).strip()
+            
+            match = pattern.search(response)
+            if match:
+                category, label = match.groups()
+                label = "Yes" if label in ["Yes", "1"] else "No"
+                answers_dict[f"{category}"] = label
+            else:
+                answers_dict[question] = response
+                answers_dict[f"{question}_comment"] = item.get("comment", "")
+        
+        model_labels.append({"post_id": post_id, "author": author_name, "classification_by": model_id, **answers_dict})
+    
     pd.DataFrame(model_labels).to_csv(model_labels_csv, index=False)
     print(f"Model labels saved to {model_labels_csv}")
+    print(f"Unparsable instances: {len(unparsable_videos)} out of 212 videos.")
     return model_labels_csv
-
 
 def compute_frame_indices(vid_n_frames: int, vid_fps: float, max_n_frames: int):
     """
