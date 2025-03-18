@@ -4,7 +4,7 @@ import pandas as pd
 from ast import literal_eval
 from collections import defaultdict
 import os
-from decord import VideoReader, cpu
+import cv2
 from PIL import Image
 import json
 import re
@@ -77,14 +77,26 @@ def get_labels():
     return merged_df
 
 def video_to_frames(video_path: Path):
-    vr = VideoReader(str(video_path), ctx=cpu(0))
+    cap = cv2.VideoCapture(str(video_path))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    
     frame_indices = compute_frame_indices(
-        vid_n_frames=len(vr), 
-        vid_fps=vr.get_avg_fps(), 
+        vid_n_frames=total_frames,
+        vid_fps=fps,
         max_n_frames=200
-    )    
-    frames = vr.get_batch(frame_indices).asnumpy()
-    frames = [Image.fromarray(frame.astype("uint8")) for frame in frames]
+    )
+    
+    frames = []
+    for frame_idx in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        success, frame = cap.read()
+        if success:
+            # Convert BGR (the default format for OpenCV) to RGB
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(Image.fromarray(frame_rgb))
+    
+    cap.release()
     return frames
 
 # Parsing output
