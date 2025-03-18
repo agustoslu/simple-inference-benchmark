@@ -15,6 +15,7 @@ sentencepiece
 duckdb
 accelerate
 bitsandbytes
+triton==3.1.0 # otherwise we get "No module named 'triton.ops' https://github.com/bitsandbytes-foundation/bitsandbytes/issues/328
 
 # FineVideo
 pyarrow
