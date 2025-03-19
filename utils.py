@@ -1,11 +1,8 @@
-import math
 from pathlib import Path
 import pandas as pd
 from ast import literal_eval
 from collections import defaultdict
 import os
-import cv2
-from PIL import Image
 import json
 import re
 
@@ -14,7 +11,7 @@ def toxicainment_data_folder() -> Path:
     dss_home = os.environ["DSS_HOME"]
     return Path(dss_home) / "toxicainment"
 
-def get_posts():
+def get_posts(n_examples: int = -1):
     videos = {}
     slides = defaultdict(list)
     folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
@@ -24,13 +21,13 @@ def get_posts():
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )  
 
-    for idx, row in posts_df.iterrows():
+    for idx, row in posts_df.head(n_examples).iterrows():
         filenames: list[str] = row["filenames"]
         is_video: bool = filenames[0].endswith(".mp4")
 
         if is_video:
             video_path = media_dir / filenames[0]
-            assert video_path.exists()
+            assert video_path.exists(), video_path
             videos[idx] = {
                 "video_path": str(video_path),
                 "author_name": row.get("author_name", "NA"),
@@ -50,7 +47,7 @@ def get_posts():
 
             if has_audio_file:
                 audio_path = media_dir / row["audio_file"]
-                assert audio_path.exists()
+                assert audio_path.exists(), audio_path
                 slides[idx]["audio_file"] = str(audio_path)
             
     return videos, slides
@@ -75,29 +72,6 @@ def get_labels():
     print(f"saved to {merged}")
 
     return merged_df
-
-def video_to_frames(video_path: Path):
-    cap = cv2.VideoCapture(str(video_path))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    
-    frame_indices = compute_frame_indices(
-        vid_n_frames=total_frames,
-        vid_fps=fps,
-        max_n_frames=200
-    )
-    
-    frames = []
-    for frame_idx in frame_indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        success, frame = cap.read()
-        if success:
-            # Convert BGR (the default format for OpenCV) to RGB
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frames.append(Image.fromarray(frame_rgb))
-    
-    cap.release()
-    return frames
 
 # Parsing output
 
@@ -160,17 +134,3 @@ def parse_output(log_path, model_labels_csv, model_id):
     print(f"Model labels saved to {model_labels_csv}")
     print(f"Unparsable instances: {len(unparsable_videos)} out of 212 videos.")
     return model_labels_csv
-
-def compute_frame_indices(vid_n_frames: int, vid_fps: float, max_n_frames: int):
-    """
-    This function will return the frames starting at 0 every second.
-    Unless that number exceeds max_n_frames, in which case it will return max_n_frames frames evenly spaced out, starting at 0.
-    """
-    assert isinstance(vid_n_frames, int), vid_n_frames
-    assert isinstance(max_n_frames, int), max_n_frames
-    vid_fps = int(vid_fps)
-    fps_n_frames = math.ceil(vid_n_frames / vid_fps)
-    if fps_n_frames <= max_n_frames:
-        return list(range(0, vid_n_frames - 1, vid_fps))
-    else:
-        return list(range(0, vid_n_frames - 1, vid_n_frames // max_n_frames))

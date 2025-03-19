@@ -15,7 +15,8 @@ sentencepiece
 duckdb
 accelerate
 bitsandbytes
-triton==3.1.0 # otherwise we get "No module named 'triton.ops' https://github.com/bitsandbytes-foundation/bitsandbytes/issues/328
+# I unpinned the triton version because its incompatible with pytorch 2.6.0
+# triton==3.1.0 # otherwise we get "No module named 'triton.ops' https://github.com/bitsandbytes-foundation/bitsandbytes/issues/328
 
 # FineVideo
 pyarrow
@@ -37,3 +38,6 @@ hf_transfer # to download models from huggingface fast
 
 # profiling
 pyinstrument
+
+# for the models
+git+https://github.com/tomasruizt/llm_app.git@134538a3eafe36667c652f0670c2494f19b8a08a#subdirectory=llmlib

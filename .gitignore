@@ -3,6 +3,7 @@ simple-inference-benchmark/dataset
 dataset
 *.mp4
 *.wav
+*.jsonl
 
 profiles/
 backup/

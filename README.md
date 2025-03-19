@@ -17,3 +17,10 @@ Run the experiment
 ```bash
 python run_minicpm.py
 ```
+
+# Troubleshooting
+
+The error Gemma not found is because of the transformers version is too early. Install this version:
+```shell
+pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
+```

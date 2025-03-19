@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import time
@@ -10,11 +11,13 @@ from transformers import AutoModel, AutoTokenizer
 from pyaml_env import parse_config
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH
-from utils import get_posts, video_to_frames
+from utils import get_posts
 import argparse
 from pyinstrument import Profiler
 import uuid
 import minicpm_omni
+# install as in requirements.txt
+from llmlib.huggingface_inference import video_to_imgs
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -41,11 +44,20 @@ def sample_n_videos(n: int, seed: int):
 
     return video_paths
 
+@dataclass
+class ModelAndTokenizer:
+    model_id: str
+    model: AutoModel
+    tokenizer: AutoTokenizer
 
-def load_model(model_id: str, config: dict):
+
+def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
     """Loads model from huggingface"""
+    print(f"Initializing model '{model_id}'...")
+
     if model_id == minicpm_omni.model_id:
         return minicpm_omni.load_model()
+
     model = AutoModel.from_pretrained(
         model_id,
         trust_remote_code=True,
@@ -54,7 +66,12 @@ def load_model(model_id: str, config: dict):
         token=config["hf_token"],
         device_map="cuda",
     ).eval()
-    return model
+
+    if config["compile"]:
+        model = torch.compile(model)
+
+    tokenizer = create_tokenizer(model_id)
+    return ModelAndTokenizer(model_id, model, tokenizer)
 
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
@@ -63,13 +80,14 @@ def metadata_generator(meta_data):
     for i in meta_data:
         yield i
 
-def fill_prompt(meta_data, prompt):
+def fill_prompt(meta_data: dict, prompt: str) -> str:
     slide_desc = meta_data["author_name"]
     slide_author = meta_data["video_description"]
     filled = prompt % (slide_desc, slide_author)
     return filled
 
-def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_meta_data):
+def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict, slide_meta_data):
+    model, tokenizer = model.model, model.tokenizer
 
     ## TODO:
     ## pass metadata for slides
@@ -82,13 +100,13 @@ def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_me
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
-        frames = video_to_frames(video_path)
+        frames = video_to_imgs(video_path, max_n_frames=config["max_n_frames_per_video"])
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 
     # Model inference
     generation_config = {
-        "max_new_tokens": token_limit,
+        "max_new_tokens": config["output_token_limit"],
         "sampling": True,
         "stream": False,
         "max_inp_length":8192*7,
@@ -106,22 +124,15 @@ def process_video(video_path, token_limit, model, tokenizer, meta_data, slide_me
         raise ValueError(f"Error generating for video: {e}") from e
 
     model_runtime = time.time() - start_model_time
-    tokens_generated = len(tokenizer.tokenize(res))
     n_frames_used = len(frames)
-    return tokens_generated, model_runtime, res, n_frames_used
+    return model_runtime, res, n_frames_used
 
 
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     this_run = str(uuid.uuid4())
     print(f"Run ID: {this_run}")
     
-    print(f"Initializing model '{model_id}'...")
     model = load_model(model_id, config)
-
-    tokenizer = create_tokenizer(model_id)
-
-    if config["compile"]:
-        model = torch.compile(model)
 
     meta_iter = metadata_generator(meta_data)
 
@@ -134,9 +145,10 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
-        tokens_generated, model_runtime, response, total_frames = process_video(
-            video_path, config["output_token_limit"], model, tokenizer, meta, slide_meta_data
+        model_runtime, response, total_frames = process_video_minicpm(
+            video_path, config, model, meta, slide_meta_data
         )
+        tokens_generated = len(model.tokenizer.tokenize(response))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
 
@@ -175,11 +187,11 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     torch.cuda.reset_peak_memory_stats()
     return
 
-def run_benchmark(n_examples=None, models=None) -> None:
+def run_benchmark(n_examples: int = -1, models=None) -> None:
     config = parse_config("./config.yaml")
 
     print("ToxicAInment data used ...")
-    videos, slides = get_posts()
+    videos, slides = get_posts(n_examples)
     video_paths = []
     slide_paths = []
     meta_data = []
@@ -202,9 +214,6 @@ def run_benchmark(n_examples=None, models=None) -> None:
         "author_name": slide_info["author_name"],
         "slide_description": slide_info["slide_description"]
        })
-
-    if n_examples is None:
-        n_examples = len(video_paths)
     
     if models is None:
         models = config["models"]
@@ -213,9 +222,9 @@ def run_benchmark(n_examples=None, models=None) -> None:
         benchmark_videos(
             config,
             model_id,
-            video_paths[:n_examples],
-            meta_data[:n_examples],
-            slide_meta_data[:n_examples],
+            video_paths,
+            meta_data,
+            slide_meta_data,
         )
 
 def parse_command_line_args():
