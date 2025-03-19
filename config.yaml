@@ -16,8 +16,10 @@ compile: False # activate torch.compile()
 models:
   - openbmb/MiniCPM-V-2_6
   - google/gemma-3-4b-it
+  - google/gemma-3-12b-it
+  - google/gemma-3-27b-it
   # - openbmb/MiniCPM-V-2_6-int4
   # internvl:
   # llama:
 
-max_n_frames_per_video: 20
+max_n_frames_per_video: 50

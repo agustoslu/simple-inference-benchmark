@@ -15,7 +15,9 @@ python download.py
 
 Run the experiment
 ```bash
-python run_minicpm.py
+python run_benchmark.py --model_id="openbmb/MiniCPM-V-2_6" --n_examples=300
+
+python run_benchmark.py --model_id="google/gemma-3-4b-it" --n_examples=300
 ```
 
 # Install llmlib

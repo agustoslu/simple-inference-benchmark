@@ -216,14 +216,14 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     meta_iter = metadata_generator(meta_data)
 
     for video_path in tqdm(video_paths, desc="Benchmarking models"):
-        print(f"\nProcessing: {video_path}")
+        print(f"\nProcessing: {video_path.name}")
         start_time = time.time()
 
         meta = next(meta_iter)
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(
-            f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
+            f"[{video_path.name}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
         )
 
         output = model.process_video(video_path=video_path, meta_data=meta)
@@ -234,10 +234,10 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         video_runtime = time.time() - start_time
 
         print(
-            f"[{os.path.basename(video_path)}] Peak Memory - Allocated: {peak_memory_allocated:.3f} GB, Reserved: {peak_memory_reserved:.3f} GB"
+            f"[{video_path.name}] Peak Memory - Allocated: {peak_memory_allocated:.3f} GB, Reserved: {peak_memory_reserved:.3f} GB"
         )
 
-        print(f"Finished {os.path.basename(video_path)}")
+        print(f"Finished {video_path.name}")
         print(f"  Total Runtime: {video_runtime:.2f}s")
         print(f"  Model Runtime: {output.model_runtime:.2f}s")
         print(f"  Num Frames:  {output.n_frames_used}")
@@ -255,7 +255,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             "Total_Frames": output.n_frames_used,
             "Peak_Memory_Allocated": peak_memory_allocated,
             "Peak_Memory_Reserved": peak_memory_reserved,
-            "Processed_Video": video_path,
+            "Processed_Video": video_path.name,
             "Generations": output.response,
         }
 
@@ -274,14 +274,14 @@ def run_benchmark(model_id: str, n_examples: int = -1) -> None:
 
     print("ToxicAInment data used ...")
     videos, slides = get_posts(n_examples)
-    video_paths = []
+    video_paths: list[Path] = []
     slide_paths = []
     meta_data = []
     slide_meta_data = []
 
     for v in videos:
         video_info = videos[v]
-        video_paths.append(video_info["video_path"])
+        video_paths.append(Path(video_info["video_path"]))
 
         meta_data.append(
             {
