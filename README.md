@@ -20,6 +20,10 @@ python run_minicpm.py
 
 # Troubleshooting
 
+#### Error: Gemma3 not found
+```shell
+ImportError: cannot import name 'Gemma3ForConditionalGeneration' from 'transformers'
+```
 The error Gemma not found is because of the transformers version is too early. Install this version:
 ```shell
 pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3

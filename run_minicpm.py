@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import cache
 import os
 from pathlib import Path
 import time
@@ -16,9 +17,11 @@ import argparse
 from pyinstrument import Profiler
 import uuid
 import minicpm_omni
+import logging
 
-# install as in requirements.txt
+# install llmlib as in requirements.txt
 from llmlib.huggingface_inference import video_to_imgs
+from llmlib.gemma3_local import Gemma3Local, Message
 
 
 # Extract and sample videos
@@ -48,21 +51,44 @@ def sample_n_videos(n: int, seed: int):
 
 
 @dataclass
+class VideoOutput:
+    response: str
+    n_frames_used: int
+    model_runtime: float
+
+
+@dataclass
 class ModelAndTokenizer:
     model_id: str
     model: AutoModel
     tokenizer: AutoTokenizer
     config: dict
 
-    def process_video(self, video_path: str, meta_data: dict):
+    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
         raise NotImplementedError("Subclasses must implement this method")
 
 
 @dataclass
 class MiniCPM(ModelAndTokenizer):
-    def process_video(self, video_path: str, meta_data: dict):
+    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
         return process_video_minicpm(
             video_path=video_path, config=self.config, model=self, meta_data=meta_data
+        )
+
+
+@dataclass
+class Gemma3(ModelAndTokenizer):
+    llmlib_model: Gemma3Local
+
+    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
+        prompt_template = read_prompt_template()
+        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        messages = [Message(role="user", msg=filled_prompt, video=video_path)]
+        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+        return VideoOutput(
+            response=output["response"],
+            n_frames_used=output["n_frames"],
+            model_runtime=output["model_runtime"],
         )
 
 
@@ -72,6 +98,9 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
 
     if model_id == minicpm_omni.model_id:
         return minicpm_omni.load_model()
+
+    if "gemma-3" in model_id:
+        return load_gemma3(model_id, config)
 
     model = AutoModel.from_pretrained(
         model_id,
@@ -89,11 +118,28 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
     return MiniCPM(model_id=model_id, model=model, tokenizer=tokenizer, config=config)
 
 
+def load_gemma3(model_id: str, config: dict) -> Gemma3:
+    llmlib_model = Gemma3Local(
+        model_id=model_id,
+        max_n_frames_per_video=config["max_n_frames_per_video"],
+        max_new_tokens=config["output_token_limit"],
+    )
+    gemma3 = Gemma3(
+        model_id=model_id,
+        model=llmlib_model.model,
+        tokenizer=llmlib_model.processor.tokenizer,
+        llmlib_model=llmlib_model,
+        config=config,
+    )
+    return gemma3
+
+
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
 
 def metadata_generator(meta_data):
+    # TODO: Wtf is this function intended to do?
     for i in meta_data:
         yield i
 
@@ -107,17 +153,16 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
 
 def process_video_minicpm(
     video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict
-):
+) -> VideoOutput:
     model, tokenizer = model.model, model.tokenizer
 
     ## TODO:
     ## pass metadata for slides
     ## a function to batch slide_paths after VideoReader processing + mp3 paths
 
-    with open("./prompt.txt", "r") as f:
-        data = f.read()
+    prompt_template = read_prompt_template()
 
-    prompt_text = "".join(data)
+    prompt_text = "".join(prompt_template)
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
@@ -150,7 +195,16 @@ def process_video_minicpm(
 
     model_runtime = time.time() - start_model_time
     n_frames_used = len(frames)
-    return model_runtime, res, n_frames_used
+    return VideoOutput(
+        response=res, n_frames_used=n_frames_used, model_runtime=model_runtime
+    )
+
+
+@cache
+def read_prompt_template() -> str:
+    with open("./prompt.txt", "r") as f:
+        text: str = f.read()
+    return text
 
 
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
@@ -172,10 +226,8 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
         )
 
-        model_runtime, response, total_frames = model.process_video(
-            video_path=video_path, meta_data=meta
-        )
-        tokens_generated = len(model.tokenizer.tokenize(response))
+        output = model.process_video(video_path=video_path, meta_data=meta)
+        tokens_generated = len(model.tokenizer.tokenize(output.response))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
 
@@ -187,7 +239,8 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
         print(f"Finished {os.path.basename(video_path)}")
         print(f"  Total Runtime: {video_runtime:.2f}s")
-        print(f"  Model Runtime: {model_runtime:.2f}s")
+        print(f"  Model Runtime: {output.model_runtime:.2f}s")
+        print(f"  Num Frames:  {output.n_frames_used}")
         print(f"  Tokens Generated: {tokens_generated}")
 
         video_saved = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -197,13 +250,13 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             "Timestamp": video_saved,
             "Model ID": model_id,
             "Total_Runtime": video_runtime,
-            "Model_Runtime": model_runtime,
+            "Model_Runtime": output.model_runtime,
             "Tokens_Generated": tokens_generated,
-            "Total_Frames": total_frames,
+            "Total_Frames": output.n_frames_used,
             "Peak_Memory_Allocated": peak_memory_allocated,
             "Peak_Memory_Reserved": peak_memory_reserved,
             "Processed_Video": video_path,
-            "Generations": response,
+            "Generations": output.response,
         }
 
         results_file = "toxicainment_videos_log.jsonl"
@@ -271,7 +324,16 @@ def parse_command_line_args():
     return args
 
 
+def enable_info_logs() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 if __name__ == "__main__":
+    enable_info_logs()
     args = parse_command_line_args()
     if args.profile:
         profiler = Profiler(interval=0.01)
