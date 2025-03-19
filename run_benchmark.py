@@ -269,7 +269,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     return
 
 
-def run_benchmark(n_examples: int = -1, models=None) -> None:
+def run_benchmark(model_id: str, n_examples: int = -1) -> None:
     config = parse_config("./config.yaml")
 
     print("ToxicAInment data used ...")
@@ -301,17 +301,13 @@ def run_benchmark(n_examples: int = -1, models=None) -> None:
             }
         )
 
-    if models is None:
-        models = config["models"]
-
-    for model_id in models:
-        benchmark_videos(
-            config,
-            model_id,
-            video_paths,
-            meta_data,
-            slide_meta_data,
-        )
+    benchmark_videos(
+        config,
+        model_id,
+        video_paths,
+        meta_data,
+        slide_meta_data,
+    )
 
 
 def parse_command_line_args():
@@ -319,8 +315,19 @@ def parse_command_line_args():
     parser.add_argument(
         "--profile", action="store_true", default=False, help="Enable profiling"
     )
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default="openbmb/MiniCPM-V-2_6",
+        help="Single model ID to benchmark",
+    )
+    parser.add_argument(
+        "--n_examples", type=int, default=2, help="Number of examples to benchmark"
+    )
     args = parser.parse_args()
-    print(f"Profile: {args.profile}")
+    print(f"Do profiling: {args.profile}")
+    print(f"Model ID: {args.model_id}")
+    print(f"Number of dataset examples: {args.n_examples}")
     return args
 
 
@@ -338,8 +345,10 @@ if __name__ == "__main__":
     if args.profile:
         profiler = Profiler(interval=0.01)
         with profiler:
-            run_benchmark(n_examples=5, models=["openbmb/MiniCPM-V-2_6"])
+            run_benchmark(model_id=args.model_id, n_examples=args.n_examples)
         os.makedirs("profiles", exist_ok=True)
-        profiler.write_html("profiles/minicpm_profile.html")
+        profiler.write_html(
+            f"profiles/profile_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        )
     else:
-        run_benchmark(n_examples=2)  # 2 vids just to check everything runs
+        run_benchmark(model_id=args.model_id, n_examples=args.n_examples)

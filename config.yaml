@@ -15,7 +15,7 @@ compile: False # activate torch.compile()
 # avoid_cache: False (TODO: place some random characters into prompt to avoid cache)
 models:
   - openbmb/MiniCPM-V-2_6
-  - gemma3/gemma3-4b-it
+  - google/gemma-3-4b-it
   # - openbmb/MiniCPM-V-2_6-int4
   # internvl:
   # llama:
