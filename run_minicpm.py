@@ -16,8 +16,10 @@ import argparse
 from pyinstrument import Profiler
 import uuid
 import minicpm_omni
+
 # install as in requirements.txt
 from llmlib.huggingface_inference import video_to_imgs
+
 
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
@@ -30,7 +32,7 @@ def sample_n_videos(n: int, seed: int):
     df = con.sql(f"""
                  SELECT id, mp4
                  FROM (SELECT mp4, ROW_NUMBER() OVER () AS id FROM '{DATASET_PATH}/*.parquet')
-                 WHERE id IN ({', '.join([str(id) for id in random_ids])})
+                 WHERE id IN ({", ".join([str(id) for id in random_ids])})
                  """).fetch_arrow_table()
 
     video_paths = []
@@ -44,19 +46,17 @@ def sample_n_videos(n: int, seed: int):
 
     return video_paths
 
+
 @dataclass
 class ModelAndTokenizer:
     model_id: str
     model: AutoModel
     tokenizer: AutoTokenizer
     config: dict
-    
+
     def process_video(self, video_path: str, meta_data: dict):
         return process_video_minicpm(
-            video_path=video_path, 
-            config=self.config, 
-            model=self,
-            meta_data=meta_data
+            video_path=video_path, config=self.config, model=self, meta_data=meta_data
         )
 
 
@@ -82,12 +82,15 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
     tokenizer = create_tokenizer(model_id)
     return ModelAndTokenizer(model_id, model, tokenizer, config=config)
 
+
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+
 
 def metadata_generator(meta_data):
     for i in meta_data:
         yield i
+
 
 def fill_prompt(meta_data: dict, prompt: str) -> str:
     slide_desc = meta_data["author_name"]
@@ -95,7 +98,10 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
     filled = prompt % (slide_desc, slide_author)
     return filled
 
-def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict):
+
+def process_video_minicpm(
+    video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict
+):
     model, tokenizer = model.model, model.tokenizer
 
     ## TODO:
@@ -109,7 +115,9 @@ def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenize
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
-        frames = video_to_imgs(video_path, max_n_frames=config["max_n_frames_per_video"])
+        frames = video_to_imgs(
+            video_path, max_n_frames=config["max_n_frames_per_video"]
+        )
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 
@@ -118,7 +126,7 @@ def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenize
         "max_new_tokens": config["output_token_limit"],
         "sampling": True,
         "stream": False,
-        "max_inp_length":8192*7,
+        "max_inp_length": 8192 * 7,
         # "temperature": 0,   # use defaults for MiniCPM
     }
 
@@ -126,7 +134,9 @@ def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenize
 
     start_model_time = time.time()
     try:
-        res = model.chat(image=None, msgs=msgs, tokenizer=tokenizer, **generation_config)
+        res = model.chat(
+            image=None, msgs=msgs, tokenizer=tokenizer, **generation_config
+        )
         print(f"Generated Text for Video: {res}")
 
     except Exception as e:
@@ -140,7 +150,7 @@ def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenize
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     this_run = str(uuid.uuid4())
     print(f"Run ID: {this_run}")
-    
+
     model = load_model(model_id, config)
 
     meta_iter = metadata_generator(meta_data)
@@ -148,15 +158,16 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     for video_path in tqdm(video_paths, desc="Benchmarking models"):
         print(f"\nProcessing: {video_path}")
         start_time = time.time()
-        
+
         meta = next(meta_iter)
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
-        print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
+        print(
+            f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
+        )
 
         model_runtime, response, total_frames = model.process_video(
-            video_path=video_path,
-            meta_data=meta
+            video_path=video_path, meta_data=meta
         )
         tokens_generated = len(model.tokenizer.tokenize(response))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
@@ -164,14 +175,16 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
         video_runtime = time.time() - start_time
 
-        print(f"[{os.path.basename(video_path)}] Peak Memory - Allocated: {peak_memory_allocated:.3f} GB, Reserved: {peak_memory_reserved:.3f} GB")
+        print(
+            f"[{os.path.basename(video_path)}] Peak Memory - Allocated: {peak_memory_allocated:.3f} GB, Reserved: {peak_memory_reserved:.3f} GB"
+        )
 
         print(f"Finished {os.path.basename(video_path)}")
         print(f"  Total Runtime: {video_runtime:.2f}s")
         print(f"  Model Runtime: {model_runtime:.2f}s")
         print(f"  Tokens Generated: {tokens_generated}")
 
-        video_saved = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        video_saved = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         row = {
             "Run_ID": this_run,
@@ -189,13 +202,13 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
         results_file = "toxicainment_videos_log.jsonl"
         row = pd.DataFrame([row])
-        
+
         row.to_json(results_file, orient="records", lines=True, mode="a")
         print(f"added line to {results_file}")
-   
 
     torch.cuda.reset_peak_memory_stats()
     return
+
 
 def run_benchmark(n_examples: int = -1, models=None) -> None:
     config = parse_config("./config.yaml")
@@ -211,20 +224,24 @@ def run_benchmark(n_examples: int = -1, models=None) -> None:
         video_info = videos[v]
         video_paths.append(video_info["video_path"])
 
-        meta_data.append({
-        "author_name": video_info["author_name"],
-        "video_description": video_info["video_description"]
-       })
+        meta_data.append(
+            {
+                "author_name": video_info["author_name"],
+                "video_description": video_info["video_description"],
+            }
+        )
 
     for s in slides:
         slide_info = slides[s]
         slide_paths.append(slide_info["slide_path"])
 
-        slide_meta_data.append({
-        "author_name": slide_info["author_name"],
-        "slide_description": slide_info["slide_description"]
-       })
-    
+        slide_meta_data.append(
+            {
+                "author_name": slide_info["author_name"],
+                "slide_description": slide_info["slide_description"],
+            }
+        )
+
     if models is None:
         models = config["models"]
 
@@ -237,12 +254,16 @@ def run_benchmark(n_examples: int = -1, models=None) -> None:
             slide_meta_data,
         )
 
+
 def parse_command_line_args():
-    parser = argparse.ArgumentParser(description='Run MiniCPM benchmark')
-    parser.add_argument('--profile', action='store_true', default=False, help='Enable profiling')
+    parser = argparse.ArgumentParser(description="Run MiniCPM benchmark")
+    parser.add_argument(
+        "--profile", action="store_true", default=False, help="Enable profiling"
+    )
     args = parser.parse_args()
     print(f"Profile: {args.profile}")
     return args
+
 
 if __name__ == "__main__":
     args = parse_command_line_args()

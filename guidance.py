@@ -1,10 +1,10 @@
 # # some github repos that might be useful
 # # bos_token issue / the same error message we get "UserWarning: Could not build_byte tokens from the tokenizer by encoding token strings: Round-trip encoding of tokens [Ð¾Ð] failed! Got [1456, 5691]"
-# # https://github.com/guidance-ai/guidance/issues/989 
+# # https://github.com/guidance-ai/guidance/issues/989
 
 # # custom chat template
 # # https://github.com/guidance-ai/guidance/discussions/917
- 
+
 # # removing tokens
 # # https://github.com/huggingface/transformers/issues/15032
 # # https://github.com/QwenLM/Qwen2.5/issues/720
@@ -38,17 +38,25 @@ import json
 # problematic tokens ["ï¿½", "Ð¾"]
 
 
-
 model_id = "openbmb/MiniCPM-V-2_6"
-tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True, force_download=True)
-model = AutoModel.from_pretrained(model_id, trust_remote_code=True, 
-                                  attn_implementation='flash_attention_2', 
-                                  torch_dtype=torch.bfloat16, device_map="cuda").eval()
+tokenizer = AutoTokenizer.from_pretrained(
+    model_id, trust_remote_code=True, force_download=True
+)
+model = AutoModel.from_pretrained(
+    model_id,
+    trust_remote_code=True,
+    attn_implementation="flash_attention_2",
+    torch_dtype=torch.bfloat16,
+    device_map="cuda",
+).eval()
 
 # create custom chat template for minicpm
 mini_template = tokenizer.chat_template
+
+
 class MiniCPMChatTemplate(ChatTemplate):
     template_str = mini_template
+
     def get_role_start(self, role_name):
         if role_name == "system":
             return "<|im_start|>system\n"
@@ -62,8 +70,12 @@ class MiniCPMChatTemplate(ChatTemplate):
     def get_role_end(self, role_name=None):
         return "<|im_end|>\n"
 
+
 # wrapping the model with guidance
-guidance_model = Transformers(model=model, tokenizer=tokenizer, chat_template=MiniCPMChatTemplate)
+guidance_model = Transformers(
+    model=model, tokenizer=tokenizer, chat_template=MiniCPMChatTemplate
+)
+
 
 # define the function for image classification task
 @guidance
@@ -98,12 +110,13 @@ def classify_image(lm, image_path, question):
     {{gen 'response' max_tokens=200}}
     {{~/assistant}}
     """
-    
+
     # concatenate image and question
     lm += f"Image Path: {image_path}\n"
     lm += f"Question: {question}\n"
 
     return lm
+
 
 image_path = "./r2d2.jpg"
 question = "What is in the image?"
