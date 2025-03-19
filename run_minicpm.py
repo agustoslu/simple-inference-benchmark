@@ -55,6 +55,12 @@ class ModelAndTokenizer:
     config: dict
 
     def process_video(self, video_path: str, meta_data: dict):
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+@dataclass
+class MiniCPM(ModelAndTokenizer):
+    def process_video(self, video_path: str, meta_data: dict):
         return process_video_minicpm(
             video_path=video_path, config=self.config, model=self, meta_data=meta_data
         )
@@ -80,7 +86,7 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
         model = torch.compile(model)
 
     tokenizer = create_tokenizer(model_id)
-    return ModelAndTokenizer(model_id, model, tokenizer, config=config)
+    return MiniCPM(model_id=model_id, model=model, tokenizer=tokenizer, config=config)
 
 
 def create_tokenizer(model_id):
