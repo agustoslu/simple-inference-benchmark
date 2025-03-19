@@ -49,6 +49,15 @@ class ModelAndTokenizer:
     model_id: str
     model: AutoModel
     tokenizer: AutoTokenizer
+    config: dict
+    
+    def process_video(self, video_path: str, meta_data: dict):
+        return process_video_minicpm(
+            video_path=video_path, 
+            config=self.config, 
+            model=self,
+            meta_data=meta_data
+        )
 
 
 def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
@@ -71,7 +80,7 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
         model = torch.compile(model)
 
     tokenizer = create_tokenizer(model_id)
-    return ModelAndTokenizer(model_id, model, tokenizer)
+    return ModelAndTokenizer(model_id, model, tokenizer, config=config)
 
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
@@ -86,7 +95,7 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
     filled = prompt % (slide_desc, slide_author)
     return filled
 
-def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict, slide_meta_data):
+def process_video_minicpm(video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict):
     model, tokenizer = model.model, model.tokenizer
 
     ## TODO:
@@ -145,8 +154,9 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(f"[{os.path.basename(video_path)}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB")
 
-        model_runtime, response, total_frames = process_video_minicpm(
-            video_path, config, model, meta, slide_meta_data
+        model_runtime, response, total_frames = model.process_video(
+            video_path=video_path,
+            meta_data=meta
         )
         tokens_generated = len(model.tokenizer.tokenize(response))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
