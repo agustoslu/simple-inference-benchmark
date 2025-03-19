@@ -19,7 +19,7 @@ import uuid
 import minicpm_omni
 import logging
 
-# install llmlib as in requirements.txt
+# install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
 
