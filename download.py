@@ -1,11 +1,12 @@
+from functools import cache
 import os
 from pathlib import Path
 from pyaml_env import parse_config
 
-config = parse_config("./config.yaml")
+code_root = Path(__file__).parent
 
-
-base_dir = Path(__file__).parent / "dataset"
+config = parse_config(code_root / "config.yaml")
+base_dir = code_root / "dataset"
 DATASET_PATH = base_dir / "FineVideo_parquet"
 MP4_DATASET_PATH = base_dir / "FineVideo_mp4"
 DATASET_PATH.mkdir(parents=True, exist_ok=True)
@@ -16,6 +17,13 @@ base_url = "https://huggingface.co/datasets/HuggingFaceFV/finevideo/resolve/main
 template = "train-{i:05d}-of-01357.parquet"
 
 access_token = config["hf_token"]
+
+
+@cache
+def read_prompt_template() -> str:
+    with open(code_root / "prompt.txt", "r") as f:
+        text: str = f.read()
+    return text
 
 
 def download_finevideo_parquet(i: int) -> None:

@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH -p lrz-hgx-h100-94x4
+#SBATCH --gres=gpu:1
+#SBATCH -o /dss/dsshome1/0D/di38bec/code/simple-inference-benchmark/enroot_test.out
+#SBATCH -e /dss/dsshome1/0D/di38bec/code/simple-inference-benchmark/enroot_test.err
+#SBATCH --job-name test-job
+#SBATCH --time 04:00:00
+
+enroot create --name my_custom_pt /dss/dsshome1/0D/di38bec/my_custom_pt.sqsh
+enroot start --rw --root \
+    --mount /dss/dsshome1/0D/di38bec/code:/workspace/code \
+    --mount /dss/dsshome1/0D/di38bec/datasets:/workspace/datasets \
+    --mount "$DSS_HOME:$DSS_HOME" \
+    --env DSS_HOME=$DSS_HOME \
+    --env HF_TOKEN=$HF_TOKEN \
+    my_custom_pt /root/ptvenv/bin/python /workspace/code/simple-inference-benchmark/run_benchmark.py --model_id='google/gemma-3-12b-it' --n_examples=300

@@ -7,6 +7,8 @@ dataset
 
 profiles/
 backup/
+*.out
+*.err
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

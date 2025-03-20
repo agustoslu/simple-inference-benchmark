@@ -20,6 +20,11 @@ python run_benchmark.py --model_id="openbmb/MiniCPM-V-2_6" --n_examples=300
 python run_benchmark.py --model_id="google/gemma-3-4b-it" --n_examples=300
 ```
 
+Run the experiment in a slurm job
+```bash
+sbatch enroot_test.sbatch
+```
+
 # Install llmlib
 You want to have both codebases side by side for development purposes, so that you can introduce changes to `llmlib` and immediately test them in this project.
 ```bash

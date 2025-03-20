@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from functools import cache
 import os
 from pathlib import Path
 import time
@@ -9,9 +8,14 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
-from pyaml_env import parse_config
 import duckdb
-from download import DATASET_PATH, MP4_DATASET_PATH
+from download import (
+    DATASET_PATH,
+    MP4_DATASET_PATH,
+    config,
+    read_prompt_template,
+    code_root,
+)
 from utils import get_posts
 import argparse
 from pyinstrument import Profiler
@@ -200,13 +204,6 @@ def process_video_minicpm(
     )
 
 
-@cache
-def read_prompt_template() -> str:
-    with open("./prompt.txt", "r") as f:
-        text: str = f.read()
-    return text
-
-
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
     this_run = str(uuid.uuid4())
     print(f"Run ID: {this_run}")
@@ -259,7 +256,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
             "Generations": output.response,
         }
 
-        results_file = "toxicainment_videos_log.jsonl"
+        results_file = code_root / "toxicainment_videos_log.jsonl"
         row = pd.DataFrame([row])
 
         row.to_json(results_file, orient="records", lines=True, mode="a")
@@ -270,8 +267,6 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
 
 def run_benchmark(model_id: str, n_examples: int = -1) -> None:
-    config = parse_config("./config.yaml")
-
     print("ToxicAInment data used ...")
     videos, slides = get_posts(n_examples)
     video_paths: list[Path] = []
