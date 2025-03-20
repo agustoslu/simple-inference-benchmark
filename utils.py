@@ -189,3 +189,34 @@ def parse_output(log_path, model_labels_csv, model_id):
     print(f"Model labels saved to {model_labels_csv}")
     print(f"Unparsable instances: {len(unparsable_videos)} out of 212 videos.")
     return model_labels_csv
+
+
+def get_answers_in_wide_format(jsonl_path: str | Path) -> pd.DataFrame:
+    assert Path(jsonl_path).exists(), jsonl_path
+    df = pd.read_json(jsonl_path, orient="records", lines=True)
+    assert df["Processed_Video"].str.contains(".mp4$").all(), (
+        "The line below is for videos"
+    )
+    df["post_id"] = df["Processed_Video"].str[-23:-4]
+    assert df["Run_ID"].nunique() == 1, "There should be only one run id"
+    answers_by_post = df["Generations"].str.extract(r"```json(.*)```", flags=re.DOTALL)[
+        0
+    ]
+    dfs = []
+    for i, row in df.iterrows():
+        answers = json.loads(answers_by_post[i])["answers"]
+        dfs.append(pd.DataFrame(answers).assign(post_id=row["post_id"]))
+
+    answers_long = pd.concat(dfs, ignore_index=True)
+    answers_wide = answers_long.pivot(
+        index="post_id", columns="question", values="answer"
+    ).reset_index()
+    comments_wide = answers_long.pivot(
+        index="post_id", columns="question", values="comment"
+    ).reset_index()
+    comments_wide.columns = [
+        "post_id",
+        *(c + "_comment" for c in answers_wide.columns if c != "post_id"),
+    ]
+    wide = pd.merge(answers_wide, comments_wide, on="post_id")
+    return wide

@@ -186,7 +186,7 @@ Please DO NOT include indentation or line breaks in your JSON to save output tok
             "comment": <comment>
         },
         {
-            "question": "is_eudaimonic_entartainment",
+            "question": "is_eudaimonic_entertainment",
             "answer": "<answer>",
             "comment": <comment>
         }
