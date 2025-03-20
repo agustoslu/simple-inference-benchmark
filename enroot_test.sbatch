@@ -13,4 +13,5 @@ enroot start --rw --root \
     --mount "$DSS_HOME:$DSS_HOME" \
     --env DSS_HOME=$DSS_HOME \
     --env HF_TOKEN=$HF_TOKEN \
+    --env HF_HOME=$HF_HOME \
     my_custom_pt /root/ptvenv/bin/python /workspace/code/simple-inference-benchmark/run_benchmark.py --model_id='google/gemma-3-12b-it' --n_examples=300
