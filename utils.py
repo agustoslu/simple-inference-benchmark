@@ -219,4 +219,15 @@ def get_answers_in_wide_format(jsonl_path: str | Path) -> pd.DataFrame:
         *(c + "_comment" for c in answers_wide.columns if c != "post_id"),
     ]
     wide = pd.merge(answers_wide, comments_wide, on="post_id")
+    wide = fix_column_typos(wide)
     return wide
+
+
+def fix_column_typos(df: pd.DataFrame) -> pd.DataFrame:
+    from_to = {
+        "is_eudaimonic_entartainment": "is_eudaimonic_entertainment",
+        "is_eudaimonic_entartainment_comment": "is_eudaimonic_entertainment_comment",
+    }
+    from_to = {k: v for k, v in from_to.items() if k in df.columns}
+    df = df.rename(columns=from_to)
+    return df
