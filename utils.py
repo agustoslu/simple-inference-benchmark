@@ -207,12 +207,14 @@ def get_answers_in_wide_format(jsonl_path: str | Path) -> pd.DataFrame:
     for i, row in df.iterrows():
         try:
             answers = json.loads(answers_by_post[i])["answers"]
-        except json.JSONDecodeError as e:
-            unparsable.append((row["post_id"], answers_by_post[i]))
-            continue
-        dfs.append(pd.DataFrame(answers).assign(post_id=row["post_id"]))
+            dfs.append(pd.DataFrame(answers).assign(post_id=row["post_id"]))
+        except (json.JSONDecodeError, TypeError) as e:
+            unparsable.append(row)
 
     answers_long = pd.concat(dfs, ignore_index=True)
+    # drop duplicated answers to questions: [{is_intolerance, yes}, {is_intolerance, no}, {is_intolerance, ...}]
+    answers_long = answers_long.groupby(["post_id", "question"], as_index=False).last()
+
     answers_wide = answers_long.pivot(
         index="post_id", columns="question", values="answer"
     ).reset_index()
@@ -225,7 +227,7 @@ def get_answers_in_wide_format(jsonl_path: str | Path) -> pd.DataFrame:
     ]
     wide = pd.merge(answers_wide, comments_wide, on="post_id")
     wide = fix_column_typos(wide)
-    return wide, unparsable
+    return wide, pd.DataFrame(unparsable)
 
 
 def fix_column_typos(df: pd.DataFrame) -> pd.DataFrame:
