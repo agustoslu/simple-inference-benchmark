@@ -20,12 +20,13 @@ from utils import get_posts
 import argparse
 from pyinstrument import Profiler
 import uuid
-import minicpm_omni
+#import minicpm_omni
 import logging
 
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
+from llmlib.qwen2_5 import Qwen2_5, Message
 
 
 # Extract and sample videos
@@ -95,6 +96,21 @@ class Gemma3(ModelAndTokenizer):
             model_runtime=output["model_runtime"],
         )
 
+@dataclass
+class Qwen(ModelAndTokenizer):
+    llmlib_model: Qwen2_5
+
+    def process_video(self, video_path: str, meta_data: str) -> VideoOutput:
+        prompt_template = read_prompt_template()
+        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        messages = [Message(role="user", msg=filled_prompt, video=video_path)]
+        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+        return VideoOutput(
+            response=output["response"],
+            n_frames_used=output["n_frames"],
+            model_runtime=output["model_runtime"],
+        )
+
 
 def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
     """Loads model from huggingface"""
@@ -105,6 +121,9 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
 
     if "gemma-3" in model_id:
         return load_gemma3(model_id, config)
+    
+    if "qwen" in model_id:
+        return load_qwen(model_id, config)
 
     model = AutoModel.from_pretrained(
         model_id,
@@ -136,6 +155,21 @@ def load_gemma3(model_id: str, config: dict) -> Gemma3:
         config=config,
     )
     return gemma3
+
+def load_qwen(model_id: str, config: dict) -> Qwen:
+    llmlib_model = Qwen2_5(
+        model_id=model_id,
+        max_n_frames_per_video=config["max_n_frames_per_video"],
+        max_new_tokens=config["output_token_limit"],
+    )
+    qwen = Qwen(
+        model_id=model_id,
+        model=llmlib_model.model,
+        #tokenizer=llmlib_model.processor.tokenizer,
+        llmlib_model=llmlib_model,
+        config=config,
+    )
+    return qwen
 
 
 def create_tokenizer(model_id):
