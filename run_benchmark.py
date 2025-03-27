@@ -20,7 +20,7 @@ from utils import get_posts
 import argparse
 from pyinstrument import Profiler
 import uuid
-#import minicpm_omni
+import minicpm_omni
 import logging
 
 # install llmlib as described in the README.md
