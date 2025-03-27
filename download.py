@@ -1,11 +1,9 @@
 from functools import cache
 import os
 from pathlib import Path
-from pyaml_env import parse_config
 
 code_root = Path(__file__).parent
 
-config = parse_config(code_root / "config.yaml")
 base_dir = code_root / "dataset"
 DATASET_PATH = base_dir / "FineVideo_parquet"
 MP4_DATASET_PATH = base_dir / "FineVideo_mp4"
@@ -16,7 +14,7 @@ base_url = "https://huggingface.co/datasets/HuggingFaceFV/finevideo/resolve/main
 
 template = "train-{i:05d}-of-01357.parquet"
 
-access_token = config["hf_token"]
+access_token = os.environ["HF_TOKEN"]
 
 
 @cache

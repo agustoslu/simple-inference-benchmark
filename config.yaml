@@ -7,11 +7,11 @@ token_settings:
   - 60
   - 90
   - 120
-output_token_limit: 512
-hf_token: !ENV ${HF_TOKEN}
+# output_token_limit: 512
+# hf_token: !ENV ${HF_TOKEN}
 home_dir: !ENV ${HOME}
 seed: 42
-compile: False # activate torch.compile()
+# compile: False # activate torch.compile()
 # avoid_cache: False (TODO: place some random characters into prompt to avoid cache)
 models:
   - openbmb/MiniCPM-V-2_6
@@ -25,4 +25,4 @@ models:
   # internvl:
   # llama:
 
-max_n_frames_per_video: 50
+# max_n_frames_per_video: 50

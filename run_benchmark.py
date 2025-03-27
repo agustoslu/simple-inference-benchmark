@@ -9,13 +9,7 @@ import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 import duckdb
-from download import (
-    DATASET_PATH,
-    MP4_DATASET_PATH,
-    config,
-    read_prompt_template,
-    code_root,
-)
+from download import DATASET_PATH, MP4_DATASET_PATH, read_prompt_template, code_root
 from utils import get_posts
 from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
@@ -27,6 +21,16 @@ import logging
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
 from llmlib.qwen2_5 import Qwen2_5
+
+
+class BenchmarkArgs(BaseSettings, cli_parse_args=True):
+    profile: bool = False
+    model_id: str = "openbmb/MiniCPM-V-2_6"
+    n_examples: int = 2
+    use_vllm: bool = False
+    max_n_frames_per_video: int = 50
+    output_token_limit: int = 512
+    compile: bool = False
 
 
 # Extract and sample videos
@@ -67,7 +71,7 @@ class ModelAndTokenizer:
     model_id: str
     model: AutoModel
     tokenizer: AutoTokenizer
-    config: dict
+    args: BenchmarkArgs
 
     def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
         raise NotImplementedError("Subclasses must implement this method")
@@ -77,7 +81,7 @@ class ModelAndTokenizer:
 class MiniCPM(ModelAndTokenizer):
     def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
         return process_video_minicpm(
-            video_path=video_path, config=self.config, model=self, meta_data=meta_data
+            video_path=video_path, args=self.args, model=self, meta_data=meta_data
         )
 
 
@@ -113,62 +117,71 @@ class Qwen(ModelAndTokenizer):
         )
 
 
-def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
+def enable_info_logs() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+def load_model(args: BenchmarkArgs) -> ModelAndTokenizer:
     """Loads model from huggingface"""
+    model_id = args.model_id
     print(f"Initializing model '{model_id}'...")
 
     # if model_id == minicpm_omni.model_id:
     #     return minicpm_omni.load_model()
 
     if "gemma-3" in model_id:
-        return load_gemma3(model_id, config)
+        return load_gemma3(model_id, args)
 
     if "Qwen" in model_id:
-        return load_qwen(model_id, config)
+        return load_qwen(model_id, args)
 
     model = AutoModel.from_pretrained(
         model_id,
         trust_remote_code=True,
         attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,
-        token=config["hf_token"],
+        token=os.environ["HF_TOKEN"],
         device_map="cuda",
     ).eval()
 
-    if config["compile"]:
+    if args.compile:
         model = torch.compile(model)
 
     tokenizer = create_tokenizer(model_id)
-    return MiniCPM(model_id=model_id, model=model, tokenizer=tokenizer, config=config)
+    return MiniCPM(model_id=model_id, model=model, tokenizer=tokenizer, args=args)
 
 
-def load_gemma3(model_id: str, config: dict) -> Gemma3:
+def load_gemma3(model_id: str, args: BenchmarkArgs) -> Gemma3:
     llmlib_model = Gemma3Local(
         model_id=model_id,
-        max_n_frames_per_video=config["max_n_frames_per_video"],
-        max_new_tokens=config["output_token_limit"],
+        max_n_frames_per_video=args.max_n_frames_per_video,
+        max_new_tokens=args.output_token_limit,
     )
     gemma3 = Gemma3(
         model_id=model_id,
         model=llmlib_model.model,
         tokenizer=llmlib_model.processor.tokenizer,
         llmlib_model=llmlib_model,
-        config=config,
+        args=args,
     )
     return gemma3
 
 
-def load_qwen(model_id: str, config: dict) -> Qwen:
+def load_qwen(model_id: str, args: BenchmarkArgs) -> Qwen:
     llmlib_model = Qwen2_5(
         model_id=model_id,
-        max_n_frames_per_video=config["max_n_frames_per_video"],
-        max_new_tokens=config["output_token_limit"],
+        max_n_frames_per_video=args.max_n_frames_per_video,
+        max_new_tokens=args.output_token_limit,
     )
     qwen = Qwen(
         model_id=model_id,
         model=llmlib_model.model,
         tokenizer=llmlib_model.processor.tokenizer,
-        config=config,
+        args=args,
         llmlib_model=llmlib_model,
     )
     return qwen
@@ -186,7 +199,7 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
 
 
 def process_video_minicpm(
-    video_path: str, config: dict, model: ModelAndTokenizer, meta_data: dict
+    video_path: str, args: BenchmarkArgs, model: ModelAndTokenizer, meta_data: dict
 ) -> VideoOutput:
     model, tokenizer = model.model, model.tokenizer
 
@@ -200,15 +213,13 @@ def process_video_minicpm(
     filled_prompt = fill_prompt(meta_data, prompt_text)
 
     try:
-        frames = video_to_imgs(
-            video_path, max_n_frames=config["max_n_frames_per_video"]
-        )
+        frames = video_to_imgs(video_path, max_n_frames=args.max_n_frames_per_video)
     except Exception as e:
         raise ValueError(f"Error processing video: {e}") from e
 
     # Model inference
     generation_config = {
-        "max_new_tokens": config["output_token_limit"],
+        "max_new_tokens": args.output_token_limit,
         "sampling": True,
         "stream": False,
         "max_inp_length": 8192 * 7,
@@ -234,8 +245,13 @@ def process_video_minicpm(
     )
 
 
-def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
-    model = load_model(model_id, config)
+def benchmark_videos(
+    args: BenchmarkArgs,
+    video_paths: list[Path],
+    meta_data: list[dict],
+    slide_meta_data: list[dict],
+):
+    model = load_model(args)
     process_dataset_by_row(model=model, video_paths=video_paths, meta_data=meta_data)
 
 
@@ -298,9 +314,9 @@ def process_dataset_by_row(
         torch.cuda.reset_peak_memory_stats()
 
 
-def run_benchmark(model_id: str, n_examples: int = -1) -> None:
+def run_benchmark(args: BenchmarkArgs) -> None:
     print("ToxicAInment data used ...")
-    videos, slides = get_posts(n_examples)
+    videos, slides = get_posts(args.n_examples)
     video_paths: list[Path] = []
     slide_paths = []
     meta_data = []
@@ -328,46 +344,20 @@ def run_benchmark(model_id: str, n_examples: int = -1) -> None:
             }
         )
 
-    benchmark_videos(
-        config,
-        model_id,
-        video_paths,
-        meta_data,
-        slide_meta_data,
-    )
-
-
-class BenchmarkSettings(BaseSettings):
-    profile: bool = False
-    model_id: str = "openbmb/MiniCPM-V-2_6"
-    n_examples: int = 2
-    use_vllm: bool = False
-
-
-def parse_command_line_args():
-    settings = BenchmarkSettings()
-    print(settings)
-    return settings
-
-
-def enable_info_logs() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    benchmark_videos(args, video_paths, meta_data, slide_meta_data)
 
 
 if __name__ == "__main__":
     enable_info_logs()
-    args = parse_command_line_args()
+    args = BenchmarkArgs()
+    print(args)
     if args.profile:
         profiler = Profiler(interval=0.01)
         with profiler:
-            run_benchmark(model_id=args.model_id, n_examples=args.n_examples)
+            run_benchmark(args)
         os.makedirs("profiles", exist_ok=True)
         profiler.write_html(
             f"profiles/profile_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
         )
     else:
-        run_benchmark(model_id=args.model_id, n_examples=args.n_examples)
+        run_benchmark(args)
