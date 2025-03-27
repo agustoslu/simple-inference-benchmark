@@ -116,8 +116,8 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
     """Loads model from huggingface"""
     print(f"Initializing model '{model_id}'...")
 
-    if model_id == minicpm_omni.model_id:
-        return minicpm_omni.load_model()
+    # if model_id == minicpm_omni.model_id:
+    #     return minicpm_omni.load_model()
 
     if "gemma-3" in model_id:
         return load_gemma3(model_id, config)
