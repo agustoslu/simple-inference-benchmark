@@ -20,7 +20,6 @@ from utils import get_posts
 import argparse
 from pyinstrument import Profiler
 import uuid
-import minicpm_omni
 import logging
 
 # install llmlib as described in the README.md
@@ -96,6 +95,7 @@ class Gemma3(ModelAndTokenizer):
             model_runtime=output["model_runtime"],
         )
 
+
 @dataclass
 class Qwen(ModelAndTokenizer):
     llmlib_model: Qwen2_5
@@ -121,7 +121,7 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
 
     if "gemma-3" in model_id:
         return load_gemma3(model_id, config)
-    
+
     if "Qwen" in model_id:
         return load_qwen(model_id, config)
 
@@ -156,6 +156,7 @@ def load_gemma3(model_id: str, config: dict) -> Gemma3:
     )
     return gemma3
 
+
 def load_qwen(model_id: str, config: dict) -> Qwen:
     llmlib_model = Qwen2_5(
         model_id=model_id,
@@ -166,20 +167,14 @@ def load_qwen(model_id: str, config: dict) -> Qwen:
         model_id=model_id,
         model=llmlib_model.model,
         tokenizer=llmlib_model.processor.tokenizer,
-        llmlib_model=llmlib_model,
         config=config,
+        llmlib_model=llmlib_model,
     )
     return qwen
 
 
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-
-
-def metadata_generator(meta_data):
-    # TODO: Wtf is this function intended to do?
-    for i in meta_data:
-        yield i
 
 
 def fill_prompt(meta_data: dict, prompt: str) -> str:
@@ -239,18 +234,22 @@ def process_video_minicpm(
 
 
 def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
+    model = load_model(model_id, config)
+    process_dataset_by_row(model=model, video_paths=video_paths, meta_data=meta_data)
+
+
+def process_dataset_by_row(
+    model: ModelAndTokenizer, video_paths: list[Path], meta_data: list[dict]
+):
     this_run = str(uuid.uuid4())
     print(f"Run ID: {this_run}")
 
-    model = load_model(model_id, config)
-
-    meta_iter = metadata_generator(meta_data)
-
-    for video_path in tqdm(video_paths, desc="Benchmarking models"):
+    for video_path, meta in tqdm(
+        zip(video_paths, meta_data), desc="Benchmarking model"
+    ):
         print(f"\nProcessing: {video_path.name}")
         start_time = time.time()
 
-        meta = next(meta_iter)
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(
@@ -279,7 +278,7 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
         row = {
             "Run_ID": this_run,
             "Timestamp": video_saved,
-            "Model ID": model_id,
+            "Model ID": model.model_id,
             "Total_Runtime": video_runtime,
             "Model_Runtime": output.model_runtime,
             "Tokens_Generated": tokens_generated,
@@ -295,9 +294,8 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
         row.to_json(results_file, orient="records", lines=True, mode="a")
         print(f"added line to {results_file}")
+        torch.cuda.reset_peak_memory_stats()
 
-    torch.cuda.reset_peak_memory_stats()
-    return
 
 def run_benchmark(model_id: str, n_examples: int = -1) -> None:
     print("ToxicAInment data used ...")
