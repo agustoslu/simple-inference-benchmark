@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 from datetime import datetime
 import random
+from typing import Literal
 import pandas as pd
 import torch
 from tqdm import tqdm
@@ -20,6 +21,7 @@ import logging
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
+from llmlib.gemma3_vllm import Gemma3vLLM as Gemma3vLLM_llmlib, Conversation
 from llmlib.qwen2_5 import Qwen2_5
 
 
@@ -31,6 +33,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     max_n_frames_per_video: int = 50
     output_token_limit: int = 512
     compile: bool = False
+    gpu_size: Literal["24GB", "80GB"] = "24GB"
 
 
 # Extract and sample videos
@@ -67,18 +70,24 @@ class VideoOutput:
 
 
 @dataclass
-class ModelAndTokenizer:
+class ModelInterface:
     model_id: str
-    model: AutoModel
-    tokenizer: AutoTokenizer
     args: BenchmarkArgs
 
     def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
-        raise NotImplementedError("Subclasses must implement this method")
+        raise NotImplementedError("Subclasses can implement this method")
+
+    def process_batch_of_videos(
+        self, video_paths: list[Path], meta_data: list[dict]
+    ) -> list[VideoOutput]:
+        raise NotImplementedError("Subclasses can implement this method")
 
 
 @dataclass
-class MiniCPM(ModelAndTokenizer):
+class MiniCPM(ModelInterface):
+    model: AutoModel
+    tokenizer: AutoTokenizer
+
     def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
         return process_video_minicpm(
             video_path=video_path, args=self.args, model=self, meta_data=meta_data
@@ -86,7 +95,7 @@ class MiniCPM(ModelAndTokenizer):
 
 
 @dataclass
-class Gemma3(ModelAndTokenizer):
+class Gemma3Hf(ModelInterface):
     llmlib_model: Gemma3Local
 
     def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
@@ -102,7 +111,34 @@ class Gemma3(ModelAndTokenizer):
 
 
 @dataclass
-class Qwen(ModelAndTokenizer):
+class Gemma3vLLM(ModelInterface):
+    llmlib_model: Gemma3vLLM_llmlib
+
+    def process_batch_of_videos(
+        self, video_paths: list[Path], meta_data: list[dict]
+    ) -> list[VideoOutput]:
+        assert len(video_paths) == len(meta_data)
+
+        convos: list[Conversation] = []
+        for video_path, meta in zip(video_paths, meta_data):
+            prompt_template = read_prompt_template()
+            filled_prompt = fill_prompt(meta_data=meta, prompt=prompt_template)
+            conversation = [Message(role="user", msg=filled_prompt, video=video_path)]
+            convos.append(conversation)
+
+        output = self.llmlib_model.complete_batch(batch=convos, output_dict=True)
+        return [
+            VideoOutput(
+                response=output["response"],
+                n_frames_used=output["n_frames"],
+                model_runtime=output["model_runtime"],
+            )
+            for output in output
+        ]
+
+
+@dataclass
+class Qwen(ModelInterface):
     llmlib_model: Qwen2_5
 
     def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
@@ -125,7 +161,7 @@ def enable_info_logs() -> None:
     )
 
 
-def load_model(args: BenchmarkArgs) -> ModelAndTokenizer:
+def load_model(args: BenchmarkArgs) -> ModelInterface:
     """Loads model from huggingface"""
     model_id = args.model_id
     print(f"Initializing model '{model_id}'...")
@@ -134,10 +170,13 @@ def load_model(args: BenchmarkArgs) -> ModelAndTokenizer:
     #     return minicpm_omni.load_model()
 
     if "gemma-3" in model_id:
-        return load_gemma3(model_id, args)
+        if args.use_vllm:
+            return load_gemma3_vllm(args)
+        else:  # use huggingface
+            return load_gemma3_huggingface(args)
 
     if "Qwen" in model_id:
-        return load_qwen(model_id, args)
+        return load_qwen(args)
 
     model = AutoModel.from_pretrained(
         model_id,
@@ -155,30 +194,33 @@ def load_model(args: BenchmarkArgs) -> ModelAndTokenizer:
     return MiniCPM(model_id=model_id, model=model, tokenizer=tokenizer, args=args)
 
 
-def load_gemma3(model_id: str, args: BenchmarkArgs) -> Gemma3:
+def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
     llmlib_model = Gemma3Local(
-        model_id=model_id,
+        model_id=args.model_id,
         max_n_frames_per_video=args.max_n_frames_per_video,
         max_new_tokens=args.output_token_limit,
     )
-    gemma3 = Gemma3(
-        model_id=model_id,
-        model=llmlib_model.model,
-        tokenizer=llmlib_model.processor.tokenizer,
-        llmlib_model=llmlib_model,
-        args=args,
+    return Gemma3Hf(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
+
+
+def load_gemma3_vllm(args: BenchmarkArgs) -> Gemma3vLLM:
+    llmlib_model = Gemma3vLLM_llmlib(
+        model_id=args.model_id,
+        max_n_frames_per_video=args.max_n_frames_per_video,
+        max_new_tokens=args.output_token_limit,
+        gpu_size=args.gpu_size,
     )
-    return gemma3
+    return Gemma3vLLM(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
 
 
-def load_qwen(model_id: str, args: BenchmarkArgs) -> Qwen:
+def load_qwen(args: BenchmarkArgs) -> Qwen:
     llmlib_model = Qwen2_5(
-        model_id=model_id,
+        model_id=args.model_id,
         max_n_frames_per_video=args.max_n_frames_per_video,
         max_new_tokens=args.output_token_limit,
     )
     qwen = Qwen(
-        model_id=model_id,
+        model_id=args.model_id,
         model=llmlib_model.model,
         tokenizer=llmlib_model.processor.tokenizer,
         args=args,
@@ -199,7 +241,7 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
 
 
 def process_video_minicpm(
-    video_path: str, args: BenchmarkArgs, model: ModelAndTokenizer, meta_data: dict
+    video_path: str, args: BenchmarkArgs, model: ModelInterface, meta_data: dict
 ) -> VideoOutput:
     model, tokenizer = model.model, model.tokenizer
 
@@ -252,11 +294,16 @@ def benchmark_videos(
     slide_meta_data: list[dict],
 ):
     model = load_model(args)
-    process_dataset_by_row(model=model, video_paths=video_paths, meta_data=meta_data)
+    if args.use_vllm:
+        batch_process_dataset(model=model, video_paths=video_paths, meta_data=meta_data)
+    else:
+        process_dataset_by_row(
+            model=model, video_paths=video_paths, meta_data=meta_data
+        )
 
 
 def process_dataset_by_row(
-    model: ModelAndTokenizer, video_paths: list[Path], meta_data: list[dict]
+    model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
 ):
     this_run = str(uuid.uuid4())
     print(f"Run ID: {this_run}")
@@ -312,6 +359,16 @@ def process_dataset_by_row(
         row.to_json(results_file, orient="records", lines=True, mode="a")
         print(f"added line to {results_file}")
         torch.cuda.reset_peak_memory_stats()
+
+
+def batch_process_dataset(
+    model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
+):
+    assert isinstance(model, Gemma3vLLM), type(model)
+    results = model.process_batch_of_videos(
+        video_paths=video_paths, meta_data=meta_data
+    )
+    # TODO: save results to file
 
 
 def run_benchmark(args: BenchmarkArgs) -> None:
