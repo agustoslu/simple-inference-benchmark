@@ -62,6 +62,7 @@ def sample_n_videos(n: int, seed: int):
     return video_paths
 
 
+# TODO: Move to llmlib
 @dataclass
 class VideoOutput:
     response: str
@@ -127,14 +128,15 @@ class Gemma3vLLM(ModelInterface):
             convos.append(conversation)
 
         output = self.llmlib_model.complete_batch(batch=convos, output_dict=True)
-        return [
-            VideoOutput(
-                response=output["response"],
-                n_frames_used=output["n_frames"],
-                model_runtime=output["model_runtime"],
+        results = []
+        for idx in range(len(output["response"])):
+            vo = VideoOutput(
+                response=output["response"][idx],
+                n_frames_used=output["n_frames"][idx],
+                model_runtime=output["model_runtime"][idx],
             )
-            for output in output
-        ]
+            results.append(vo)
+        return results
 
 
 @dataclass
@@ -305,8 +307,7 @@ def benchmark_videos(
 def process_dataset_by_row(
     model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
 ):
-    this_run = str(uuid.uuid4())
-    print(f"Run ID: {this_run}")
+    this_run = generate_run_uuid()
 
     for video_path, meta in tqdm(
         zip(video_paths, meta_data), desc="Benchmarking model"
@@ -337,11 +338,9 @@ def process_dataset_by_row(
         print(f"  Num Frames:  {output.n_frames_used}")
         print(f"  Tokens Generated: {tokens_generated}")
 
-        video_saved = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
         row = {
             "Run_ID": this_run,
-            "Timestamp": video_saved,
+            "Timestamp": generate_timestamp(),
             "Model ID": model.model_id,
             "Total_Runtime": video_runtime,
             "Model_Runtime": output.model_runtime,
@@ -353,22 +352,49 @@ def process_dataset_by_row(
             "Generations": output.response,
         }
 
-        results_file = code_root / "toxicainment_videos_log.jsonl"
-        row = pd.DataFrame([row])
-
-        row.to_json(results_file, orient="records", lines=True, mode="a")
-        print(f"added line to {results_file}")
+        df = pd.DataFrame([row])
+        save_to_results_files(df)
         torch.cuda.reset_peak_memory_stats()
+
+
+def generate_timestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def generate_run_uuid() -> str:
+    uid = str(uuid.uuid4())
+    print(f"Run ID: {uid}")
+    return uid
+
+
+def save_to_results_files(df: pd.DataFrame) -> None:
+    results_file = code_root / "toxicainment_videos_log.jsonl"
+    df.to_json(results_file, orient="records", lines=True, mode="a")
+    print(f"added line to {results_file}")
 
 
 def batch_process_dataset(
     model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
 ):
     assert isinstance(model, Gemma3vLLM), type(model)
-    results = model.process_batch_of_videos(
+    start_time = time.time()
+    results: list[VideoOutput] = model.process_batch_of_videos(
         video_paths=video_paths, meta_data=meta_data
     )
-    # TODO: save results to file
+    runtime = time.time() - start_time
+    data = {
+        "Run_ID": generate_run_uuid(),
+        "Timestamp": generate_timestamp(),
+        "Model ID": model.model_id,
+        "Total_Runtime": runtime / len(results),
+        "Model_Runtime": [r.model_runtime for r in results],
+        # "Tokens_Generated": [r.tokens_generated for r in results],
+        "Total_Frames": [r.n_frames_used for r in results],
+        "Processed_Video": [p.name for p in video_paths],
+        "Generations": [r.response for r in results],
+    }
+    df = pd.DataFrame(data)
+    save_to_results_files(df)
 
 
 def run_benchmark(args: BenchmarkArgs) -> None:
