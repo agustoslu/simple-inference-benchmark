@@ -17,15 +17,16 @@ from download import (
     code_root,
 )
 from utils import get_posts
-import argparse
+from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
 import uuid
 import logging
 
+
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
-from llmlib.qwen2_5 import Qwen2_5, Message
+from llmlib.qwen2_5 import Qwen2_5
 
 
 # Extract and sample videos
@@ -336,25 +337,17 @@ def run_benchmark(model_id: str, n_examples: int = -1) -> None:
     )
 
 
+class BenchmarkSettings(BaseSettings):
+    profile: bool = False
+    model_id: str = "openbmb/MiniCPM-V-2_6"
+    n_examples: int = 2
+    use_vllm: bool = False
+
+
 def parse_command_line_args():
-    parser = argparse.ArgumentParser(description="Run MiniCPM benchmark")
-    parser.add_argument(
-        "--profile", action="store_true", default=False, help="Enable profiling"
-    )
-    parser.add_argument(
-        "--model_id",
-        type=str,
-        default="openbmb/MiniCPM-V-2_6",
-        help="Single model ID to benchmark",
-    )
-    parser.add_argument(
-        "--n_examples", type=int, default=2, help="Number of examples to benchmark"
-    )
-    args = parser.parse_args()
-    print(f"Do profiling: {args.profile}")
-    print(f"Model ID: {args.model_id}")
-    print(f"Number of dataset examples: {args.n_examples}")
-    return args
+    settings = BenchmarkSettings()
+    print(settings)
+    return settings
 
 
 def enable_info_logs() -> None:
