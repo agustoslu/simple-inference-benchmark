@@ -100,7 +100,7 @@ class Gemma3(ModelAndTokenizer):
 class Qwen(ModelAndTokenizer):
     llmlib_model: Qwen2_5
 
-    def process_video(self, video_path: str, meta_data: str) -> VideoOutput:
+    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
@@ -122,7 +122,7 @@ def load_model(model_id: str, config: dict) -> ModelAndTokenizer:
     if "gemma-3" in model_id:
         return load_gemma3(model_id, config)
     
-    if "qwen" in model_id:
+    if "Qwen" in model_id:
         return load_qwen(model_id, config)
 
     model = AutoModel.from_pretrained(
@@ -165,7 +165,7 @@ def load_qwen(model_id: str, config: dict) -> Qwen:
     qwen = Qwen(
         model_id=model_id,
         model=llmlib_model.model,
-        #tokenizer=llmlib_model.processor.tokenizer,
+        tokenizer=llmlib_model.processor.tokenizer,
         llmlib_model=llmlib_model,
         config=config,
     )
@@ -298,7 +298,6 @@ def benchmark_videos(config, model_id, video_paths, meta_data, slide_meta_data):
 
     torch.cuda.reset_peak_memory_stats()
     return
-
 
 def run_benchmark(model_id: str, n_examples: int = -1) -> None:
     print("ToxicAInment data used ...")

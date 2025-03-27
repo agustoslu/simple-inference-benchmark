@@ -1,40 +1,40 @@
 # pip install -r ./requirements.txt --verbose (without --verbose, does not work properly on the server, it just freezes.)
- 
- # Some other dependencies: 
- 
- # apt-get install -y wget
- # apt-get install -y libgl1
- # apt-get install -y libglib2.0-0
- 
- # Minicpm & quantized
- Pillow
- torch
- torchvision
- transformers==4.47.1 # otherwise we get valueError related to broadcasting / in the library they have changed iterable to sequence in 4.49.1
- sentencepiece
- duckdb
- accelerate
- bitsandbytes
- # I unpinned the triton version because its incompatible with pytorch 2.6.0
- # triton==3.1.0 # otherwise we get "No module named 'triton.ops' https://github.com/bitsandbytes-foundation/bitsandbytes/issues/328
- 
- # FineVideo
- pyarrow
- fastparquet
- pandas
- opencv-python
- 
- # env variable config file
- pyaml-env
- 
- pyyaml
- 
- # metrics
- rouge-score
- bert-score
- scikit-learn
- 
- hf_transfer # to download models from huggingface fast
- 
- # profiling
- pyinstrument
+
+# Some other dependencies: 
+
+# apt-get install -y wget
+# apt-get install -y libgl1
+# apt-get install -y libglib2.0-0
+
+# Minicpm & quantized
+Pillow
+torch
+torchvision
+transformers==4.47.1 # otherwise we get valueError related to broadcasting / in the library they have changed iterable to sequence in 4.49.1
+sentencepiece
+duckdb
+accelerate
+bitsandbytes
+# I unpinned the triton version because its incompatible with pytorch 2.6.0
+# triton==3.1.0 # otherwise we get "No module named 'triton.ops' https://github.com/bitsandbytes-foundation/bitsandbytes/issues/328
+
+# FineVideo
+pyarrow
+fastparquet
+pandas
+opencv-python
+
+# env variable config file
+pyaml-env
+
+pyyaml
+
+# metrics
+rouge-score
+bert-score
+scikit-learn
+
+hf_transfer # to download models from huggingface fast
+
+# profiling
+pyinstrument
