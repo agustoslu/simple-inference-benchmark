@@ -39,7 +39,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
 # Extract and sample videos
 def sample_n_videos(n: int, seed: int):
     con = duckdb.connect()
-    n_videos = con.sql(f"SELECT COUNT(*) FROM '{DATASET_PATH}/*.parquet'").fetchone()[0]
+    n_videos = con.sql(f"SELECT COUNT(*) FROM '{DATASET_PATH}/*.parquet'").fetchone()[0]  # type: ignore
     print(f"Total videos: {n_videos}")
     random.seed(seed)
     random_ids = random.sample(range(n_videos), n)
@@ -75,7 +75,7 @@ class ModelInterface:
     model_id: str
     args: BenchmarkArgs
 
-    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         raise NotImplementedError("Subclasses can implement this method")
 
     def process_batch_of_videos(
@@ -85,21 +85,24 @@ class ModelInterface:
 
 
 @dataclass
-class MiniCPM(ModelInterface):
+class HuggingFaceModel(ModelInterface):
     model: AutoModel
     tokenizer: AutoTokenizer
 
-    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
+
+@dataclass
+class MiniCPM(HuggingFaceModel):
+    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         return process_video_minicpm(
-            video_path=video_path, args=self.args, model=self, meta_data=meta_data
+            video_path=video_path, args=self.args, hf=self, meta_data=meta_data
         )
 
 
 @dataclass
-class Gemma3Hf(ModelInterface):
+class Gemma3Hf(HuggingFaceModel):
     llmlib_model: Gemma3Local
 
-    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
@@ -140,10 +143,10 @@ class Gemma3vLLM(ModelInterface):
 
 
 @dataclass
-class Qwen(ModelInterface):
+class Qwen(HuggingFaceModel):
     llmlib_model: Qwen2_5
 
-    def process_video(self, video_path: str, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
@@ -202,7 +205,13 @@ def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
         max_n_frames_per_video=args.max_n_frames_per_video,
         max_new_tokens=args.output_token_limit,
     )
-    return Gemma3Hf(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
+    return Gemma3Hf(
+        model=llmlib_model.model,
+        tokenizer=llmlib_model.processor.tokenizer,
+        model_id=args.model_id,
+        args=args,
+        llmlib_model=llmlib_model,
+    )
 
 
 def load_gemma3_vllm(args: BenchmarkArgs) -> Gemma3vLLM:
@@ -243,9 +252,9 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
 
 
 def process_video_minicpm(
-    video_path: str, args: BenchmarkArgs, model: ModelInterface, meta_data: dict
+    video_path: str | Path, args: BenchmarkArgs, hf: HuggingFaceModel, meta_data: dict
 ) -> VideoOutput:
-    model, tokenizer = model.model, model.tokenizer
+    model, tokenizer = hf.model, hf.tokenizer
 
     ## TODO:
     ## pass metadata for slides
@@ -299,13 +308,14 @@ def benchmark_videos(
     if args.use_vllm:
         batch_process_dataset(model=model, video_paths=video_paths, meta_data=meta_data)
     else:
+        assert isinstance(model, HuggingFaceModel)
         process_dataset_by_row(
             model=model, video_paths=video_paths, meta_data=meta_data
         )
 
 
 def process_dataset_by_row(
-    model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
+    model: HuggingFaceModel, video_paths: list[Path], meta_data: list[dict]
 ):
     this_run = generate_run_uuid()
 
