@@ -11,7 +11,7 @@ from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH, read_prompt_template, code_root
-from utils import get_posts
+from bench_lib.utils import get_posts
 from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
 import uuid

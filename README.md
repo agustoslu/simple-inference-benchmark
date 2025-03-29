@@ -24,6 +24,11 @@ Run the experiment in a slurm job
 ```bash
 sbatch enroot_test.sbatch
 ```
+# Install bench_lib
+The `bench_lib` is a package containing utility code and evaluation code. By installing it you can import it everywhere (e.g. within jupyter notebook in `notebooks/`) without worrying about the path of files. 
+```bash
+pip install -e bench_lib
+```
 
 # Install llmlib
 You want to have both codebases side by side for development purposes, so that you can introduce changes to `llmlib` and immediately test them in this project.

@@ -1,20 +1,34 @@
 from pathlib import Path
-from utils import get_answers_in_wide_format
+
+import pandas as pd
+from bench_lib.utils import get_answers_in_wide_format
 
 
-def parse_and_dump_labels(model_id: str):
-    root_dir = Path("results") / model_id
+def parse_and_dump_labels(folder: str):
+    root_dir = Path("results") / folder
     jsonl_path = root_dir / "toxicainment_videos_log.jsonl"
-    wide_df, unparsable = get_answers_in_wide_format(jsonl_path)
+    assert Path(jsonl_path).exists(), jsonl_path
+    df = pd.read_json(jsonl_path, orient="records", lines=True)
+
+    wides = []
+    unparsables = []
+    for run_id, group_df in df.groupby("Run_ID"):
+        wide_df, unparsable = get_answers_in_wide_format(raw_jsonl_lines=group_df)
+        wides.append(wide_df)
+        unparsables.append(unparsable)
+    wide_df = pd.concat(wides, ignore_index=True)
+    unparsable = pd.concat(unparsables, ignore_index=True)
+
     print(
-        "Model: %s, Parsed: %d, Unparsable: %d"
-        % (model_id, len(wide_df), len(unparsable))
+        "Folder: %s, Parsed: %d, Unparsable: %d"
+        % (folder, len(wide_df), len(unparsable))
     )
     wide_df.to_csv(root_dir / "model_labels.csv", index=False)
     unparsable.to_csv(root_dir / "unparsable_rows.csv", index=False)
 
 
 if __name__ == "__main__":
-    models = ["gemma-3-4b-it", "gemma-3-12b-it", "gemma-3-27b-it", "MiniCPM-V-2.6"]
-    for model_id in models:
-        parse_and_dump_labels(model_id)
+    # models = ["gemma-3-4b-it", "gemma-3-12b-it", "gemma-3-27b-it", "MiniCPM-V-2.6"]
+    folders = [f"gemma-3-27b-it_{n:02d}" for n in range(3)]
+    for folder in folders:
+        parse_and_dump_labels(folder)

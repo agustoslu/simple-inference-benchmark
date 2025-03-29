@@ -3,6 +3,7 @@ import krippendorff
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from bench_lib.utils import Cols
 
 
 def visualize_runtime(df: pd.DataFrame) -> None:
@@ -69,19 +70,21 @@ def get_means(labels_df: pd.DataFrame, question: str):
 
 
 def load_ai_labels(
-    models: list[str], questions: list[str], comment_cols: list[str]
+    folders: list[str], questions: list[str], comment_cols: list[str]
 ) -> pd.DataFrame:
     all_ai_labels = []
-    for model_id in models:
+    for folder in folders:
         ai_labels = pd.read_csv(
-            f"../results/{model_id}/model_labels.csv", dtype={"post_id": str}
+            f"../results/{folder}/model_labels.csv", dtype={"post_id": str}
         )
-        ai_labels = ai_labels[["post_id", *questions, *comment_cols]]
+        ai_labels = ai_labels[
+            [Cols.run_id, Cols.model_id, Cols.post_id, *questions, *comment_cols]
+        ]
         rows_w_na = ai_labels[questions].isna().any(axis=1)
-        print(f"{model_id}: filtering {rows_w_na.sum()} rows with NA values")
+        print(f"{folder}: filtering {rows_w_na.sum()} rows with NA values")
         complete_ai_labels = ai_labels[~rows_w_na]
-        print(f"{model_id}: {len(complete_ai_labels)} rows after filtering")
-        all_ai_labels.append(complete_ai_labels.assign(model_id=model_id))
+        print(f"{folder}: {len(complete_ai_labels)} rows after filtering")
+        all_ai_labels.append(complete_ai_labels.assign(model_id=folder))
 
     all_ai_labels = pd.concat(all_ai_labels)
     return all_ai_labels

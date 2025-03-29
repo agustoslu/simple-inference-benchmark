@@ -191,9 +191,8 @@ def parse_output(log_path, model_labels_csv, model_id):
     return model_labels_csv
 
 
-def get_answers_in_wide_format(jsonl_path: str | Path) -> pd.DataFrame:
-    assert Path(jsonl_path).exists(), jsonl_path
-    df = pd.read_json(jsonl_path, orient="records", lines=True)
+def get_answers_in_wide_format(raw_jsonl_lines: pd.DataFrame) -> pd.DataFrame:
+    df = raw_jsonl_lines
     assert df["Processed_Video"].str.contains(".mp4$").all(), (
         "The line below is for videos"
     )
@@ -207,25 +206,37 @@ def get_answers_in_wide_format(jsonl_path: str | Path) -> pd.DataFrame:
     for i, row in df.iterrows():
         try:
             answers = json.loads(answers_by_post[i])["answers"]
-            dfs.append(pd.DataFrame(answers).assign(post_id=row["post_id"]))
+            extra_data = {
+                Cols.run_id: row[Cols.run_id],
+                Cols.model_id: row[Cols.model_id],
+                Cols.post_id: row[Cols.post_id],
+            }
+            dfs.append(pd.DataFrame(answers).assign(**extra_data))
         except (json.JSONDecodeError, TypeError) as e:
             unparsable.append(row)
 
     answers_long = pd.concat(dfs, ignore_index=True)
     # drop duplicated answers to questions: [{is_intolerance, yes}, {is_intolerance, no}, {is_intolerance, ...}]
-    answers_long = answers_long.groupby(["post_id", "question"], as_index=False).last()
+    answers_long = answers_long.groupby(
+        [Cols.post_id, "question"], as_index=False
+    ).last()
 
+    idx_cols = [Cols.run_id, Cols.model_id, Cols.post_id]
     answers_wide = answers_long.pivot(
-        index="post_id", columns="question", values="answer"
+        index=idx_cols,
+        columns="question",
+        values="answer",
     ).reset_index()
     comments_wide = answers_long.pivot(
-        index="post_id", columns="question", values="comment"
+        index=idx_cols,
+        columns="question",
+        values="comment",
     ).reset_index()
     comments_wide.columns = [
-        "post_id",
-        *(c + "_comment" for c in answers_wide.columns if c != "post_id"),
+        *idx_cols,
+        *(c + "_comment" for c in answers_wide.columns if c not in idx_cols),
     ]
-    wide = pd.merge(answers_wide, comments_wide, on="post_id")
+    wide = pd.merge(answers_wide, comments_wide, on=idx_cols)
     wide = fix_column_typos(wide)
     return wide, pd.DataFrame(unparsable)
 
@@ -238,3 +249,9 @@ def fix_column_typos(df: pd.DataFrame) -> pd.DataFrame:
     from_to = {k: v for k, v in from_to.items() if k in df.columns}
     df = df.rename(columns=from_to)
     return df
+
+
+class Cols:
+    post_id = "post_id"
+    run_id = "Run_ID"
+    model_id = "Model ID"
