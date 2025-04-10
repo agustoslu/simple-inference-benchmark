@@ -17,7 +17,6 @@ from pyinstrument import Profiler
 import uuid
 import logging
 
-
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
@@ -101,10 +100,11 @@ class MiniCPM(HuggingFaceModel):
 @dataclass
 class Gemma3Hf(HuggingFaceModel):
     llmlib_model: Gemma3Local
-
+    
     def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+       
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
         return VideoOutput(
@@ -324,15 +324,14 @@ def process_dataset_by_row(
     ):
         print(f"\nProcessing: {video_path.name}")
         start_time = time.time()
-
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
         print(
             f"[{video_path.name}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
         )
-
+       
         output = model.process_video(video_path=video_path, meta_data=meta)
-        tokens_generated = len(model.tokenizer.tokenize(output.response))
+        tokens_generated = len(model.tokenizer.tokenize(str((output.response))))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
 
