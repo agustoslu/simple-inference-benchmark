@@ -22,6 +22,7 @@ from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
 from llmlib.gemma3_vllm import Gemma3vLLM as Gemma3vLLM_llmlib, Conversation
 from llmlib.qwen2_5 import Qwen2_5
+from llmlib.llama_4 import Llama_4
 
 
 class BenchmarkArgs(BaseSettings, cli_parse_args=True):
@@ -158,6 +159,22 @@ class Qwen(HuggingFaceModel):
         )
 
 
+@dataclass
+class Llama(HuggingFaceModel):
+    llmlib_model: Llama_4
+
+    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+        prompt_template = read_prompt_template()
+        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        messages = [Message(role="user", msg=filled_prompt, video=video_path)]
+        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+        return VideoOutput(
+            response=output["response"],
+            n_frames_used=output["n_frames"],
+            model_runtime=output["model_runtime"],
+        )
+
+
 def enable_info_logs() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -182,6 +199,9 @@ def load_model(args: BenchmarkArgs) -> ModelInterface:
 
     if "Qwen" in model_id:
         return load_qwen(args)
+    
+    if "Llama" in model_id:
+        return load_llama(args)
 
     model = AutoModel.from_pretrained(
         model_id,
@@ -238,6 +258,21 @@ def load_qwen(args: BenchmarkArgs) -> Qwen:
         llmlib_model=llmlib_model,
     )
     return qwen
+
+def load_llama(args: BenchmarkArgs) -> Llama:
+    llmlib_model = Llama_4(
+        model_id=args.model_id,
+        max_n_frames_per_video=args.max_n_frames_per_video,
+        max_new_tokens=args.output_token_limit,
+    )
+    llama = Llama(
+        model_id=args.model_id,
+        model=llmlib_model.model,
+        tokenizer=llmlib_model.processor.tokenizer,
+        args=args,
+        llmlib_model=llmlib_model,
+    )
+    return llama
 
 
 def create_tokenizer(model_id):
