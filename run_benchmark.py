@@ -23,6 +23,7 @@ from llmlib.gemma3_local import Gemma3Local, Message
 from llmlib.gemma3_vllm import Gemma3vLLM as Gemma3vLLM_llmlib, Conversation
 from llmlib.qwen2_5 import Qwen2_5
 from llmlib.llama_4 import Llama_4
+from llmlib.gemini.gemini_code import GeminiAPI
 
 
 class BenchmarkArgs(BaseSettings, cli_parse_args=True):
@@ -66,8 +67,8 @@ def sample_n_videos(n: int, seed: int):
 @dataclass
 class VideoOutput:
     response: str
-    n_frames_used: int
-    model_runtime: float
+    n_frames_used: int | None
+    model_runtime: float | None
 
 
 @dataclass
@@ -101,11 +102,11 @@ class MiniCPM(HuggingFaceModel):
 @dataclass
 class Gemma3Hf(HuggingFaceModel):
     llmlib_model: Gemma3Local
-    
+
     def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
-       
+
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
         return VideoOutput(
@@ -175,6 +176,23 @@ class Llama(HuggingFaceModel):
         )
 
 
+@dataclass
+class Gemini(ModelInterface):
+    llmlib_model: GeminiAPI
+
+    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+        prompt_template = read_prompt_template()
+        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        response = self.llmlib_model.video_prompt(
+            video=video_path, prompt=filled_prompt
+        )
+        return VideoOutput(
+            response=response,
+            n_frames_used=None,  # Gemini handles video frames internally
+            model_runtime=None,  # Remote API doesn't provide model runtime
+        )
+
+
 def enable_info_logs() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -199,9 +217,12 @@ def load_model(args: BenchmarkArgs) -> ModelInterface:
 
     if "Qwen" in model_id:
         return load_qwen(args)
-    
+
     if "Llama" in model_id:
         return load_llama(args)
+
+    if "gemini" in model_id.lower():
+        return load_gemini(args)
 
     model = AutoModel.from_pretrained(
         model_id,
@@ -259,6 +280,7 @@ def load_qwen(args: BenchmarkArgs) -> Qwen:
     )
     return qwen
 
+
 def load_llama(args: BenchmarkArgs) -> Llama:
     llmlib_model = Llama_4(
         model_id=args.model_id,
@@ -273,6 +295,14 @@ def load_llama(args: BenchmarkArgs) -> Llama:
         llmlib_model=llmlib_model,
     )
     return llama
+
+
+def load_gemini(args: BenchmarkArgs) -> Gemini:
+    llmlib_model = GeminiAPI(
+        model_id=args.model_id,
+        max_output_tokens=args.output_token_limit,
+    )
+    return Gemini(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
 
 
 def create_tokenizer(model_id):
@@ -342,11 +372,43 @@ def benchmark_videos(
     model = load_model(args)
     if args.use_vllm:
         batch_process_dataset(model=model, video_paths=video_paths, meta_data=meta_data)
-    else:
-        assert isinstance(model, HuggingFaceModel)
+    elif isinstance(model, HuggingFaceModel):
         process_dataset_by_row(
             model=model, video_paths=video_paths, meta_data=meta_data
         )
+    else:  # Remote models like Gemini
+        process_dataset_by_row_remotely(model=model, video_paths=video_paths, meta_data=meta_data)
+
+
+def process_dataset_by_row_remotely(
+    model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
+):
+    this_run = generate_run_uuid()
+
+    for video_path, meta in tqdm(
+        zip(video_paths, meta_data), desc="Benchmarking remote model"
+    ):
+        print(f"\nProcessing: {video_path.name}")
+
+        start_time = time.time()
+        output = model.process_video(video_path=video_path, meta_data=meta)
+        video_runtime = time.time() - start_time
+
+        print(f"Finished {video_path.name}")
+        print(f"  Total Runtime: {video_runtime:.2f}s")
+        print(f"  Response: {output.response[:100]}...")
+
+        row = {
+            "Run_ID": this_run,
+            "Timestamp": generate_timestamp(),
+            "Model ID": model.model_id,
+            "Total_Runtime": video_runtime,
+            "Processed_Video": video_path.name,
+            "Generations": output.response,
+        }
+
+        df = pd.DataFrame([row])
+        save_to_results_files(df)
 
 
 def process_dataset_by_row(
@@ -364,7 +426,7 @@ def process_dataset_by_row(
         print(
             f"[{video_path.name}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
         )
-       
+
         output = model.process_video(video_path=video_path, meta_data=meta)
         tokens_generated = len(model.tokenizer.tokenize(str((output.response))))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
