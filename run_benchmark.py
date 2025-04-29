@@ -301,6 +301,8 @@ def load_gemini(args: BenchmarkArgs) -> Gemini:
     llmlib_model = GeminiAPI(
         model_id=args.model_id,
         max_output_tokens=args.output_token_limit,
+        location="us-central1",
+        delete_files_after_use=False,
     )
     return Gemini(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
 
@@ -377,7 +379,9 @@ def benchmark_videos(
             model=model, video_paths=video_paths, meta_data=meta_data
         )
     else:  # Remote models like Gemini
-        process_dataset_by_row_remotely(model=model, video_paths=video_paths, meta_data=meta_data)
+        process_dataset_by_row_remotely(
+            model=model, video_paths=video_paths, meta_data=meta_data
+        )
 
 
 def process_dataset_by_row_remotely(
@@ -385,9 +389,7 @@ def process_dataset_by_row_remotely(
 ):
     this_run = generate_run_uuid()
 
-    for video_path, meta in tqdm(
-        zip(video_paths, meta_data), desc="Benchmarking remote model"
-    ):
+    for video_path, meta in tqdm(list(zip(video_paths, meta_data))):
         print(f"\nProcessing: {video_path.name}")
 
         start_time = time.time()
