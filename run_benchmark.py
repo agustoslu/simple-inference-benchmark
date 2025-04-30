@@ -26,6 +26,9 @@ from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
 
 
+logger = logging.getLogger(__name__)
+
+
 class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     profile: bool = False
     model_id: str = "openbmb/MiniCPM-V-2_6"
@@ -41,10 +44,10 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
 def sample_n_videos(n: int, seed: int):
     con = duckdb.connect()
     n_videos = con.sql(f"SELECT COUNT(*) FROM '{DATASET_PATH}/*.parquet'").fetchone()[0]  # type: ignore
-    print(f"Total videos: {n_videos}")
+    logger.info("Total videos: %d", n_videos)
     random.seed(seed)
     random_ids = random.sample(range(n_videos), n)
-    print(f"Randomly selected video IDs: {random_ids}")
+    logger.info("Randomly selected video IDs: %s", random_ids)
     df = con.sql(f"""
                  SELECT id, mp4
                  FROM (SELECT mp4, ROW_NUMBER() OVER () AS id FROM '{DATASET_PATH}/*.parquet')
@@ -57,7 +60,7 @@ def sample_n_videos(n: int, seed: int):
         if not Path(mp4_video_path).exists():
             with open(mp4_video_path, "wb") as f:
                 f.write(row.as_py())
-            print(f"Saved video to {mp4_video_path}")
+            logger.info("Saved video to %s", mp4_video_path)
         video_paths.append(mp4_video_path)
 
     return video_paths
@@ -204,7 +207,7 @@ def enable_info_logs() -> None:
 def load_model(args: BenchmarkArgs) -> ModelInterface:
     """Loads model from huggingface"""
     model_id = args.model_id
-    print(f"Initializing model '{model_id}'...")
+    logger.info("Initializing model '%s'...", model_id)
 
     # if model_id == minicpm_omni.model_id:
     #     return minicpm_omni.load_model()
@@ -353,7 +356,7 @@ def process_video_minicpm(
         res = model.chat(
             image=None, msgs=msgs, tokenizer=tokenizer, **generation_config
         )
-        print(f"Generated Text for Video: {res}")
+        logger.info("Generated Text for Video: %s", res)
 
     except Exception as e:
         raise ValueError(f"Error generating for video: {e}") from e
@@ -390,15 +393,15 @@ def process_dataset_by_row_remotely(
     this_run = generate_run_uuid()
 
     for video_path, meta in tqdm(list(zip(video_paths, meta_data))):
-        print(f"\nProcessing: {video_path.name}")
+        logger.info("\nProcessing: %s", video_path.name)
 
         start_time = time.time()
         output = model.process_video(video_path=video_path, meta_data=meta)
         video_runtime = time.time() - start_time
 
-        print(f"Finished {video_path.name}")
-        print(f"  Total Runtime: {video_runtime:.2f}s")
-        print(f"  Response: {output.response[:100]}...")
+        logger.info("Finished %s", video_path.name)
+        logger.info("  Total Runtime: %.2fs", video_runtime)
+        logger.info("  Response: %s...", output.response[:100])
 
         row = {
             "Run_ID": this_run,
@@ -421,12 +424,15 @@ def process_dataset_by_row(
     for video_path, meta in tqdm(
         zip(video_paths, meta_data), desc="Benchmarking model"
     ):
-        print(f"\nProcessing: {video_path.name}")
+        logger.info("\nProcessing: %s", video_path.name)
         start_time = time.time()
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
-        print(
-            f"[{video_path.name}] Initial Memory - Allocated: {initial_memory_allocated:.3f} GB, Reserved: {initial_memory_reserved:.3f} GB"
+        logger.info(
+            "[%s] Initial Memory - Allocated: %.3f GB, Reserved: %.3f GB",
+            video_path.name,
+            initial_memory_allocated,
+            initial_memory_reserved
         )
 
         output = model.process_video(video_path=video_path, meta_data=meta)
@@ -436,15 +442,18 @@ def process_dataset_by_row(
 
         video_runtime = time.time() - start_time
 
-        print(
-            f"[{video_path.name}] Peak Memory - Allocated: {peak_memory_allocated:.3f} GB, Reserved: {peak_memory_reserved:.3f} GB"
+        logger.info(
+            "[%s] Peak Memory - Allocated: %.3f GB, Reserved: %.3f GB",
+            video_path.name,
+            peak_memory_allocated,
+            peak_memory_reserved
         )
 
-        print(f"Finished {video_path.name}")
-        print(f"  Total Runtime: {video_runtime:.2f}s")
-        print(f"  Model Runtime: {output.model_runtime:.2f}s")
-        print(f"  Num Frames:  {output.n_frames_used}")
-        print(f"  Tokens Generated: {tokens_generated}")
+        logger.info("Finished %s", video_path.name)
+        logger.info("  Total Runtime: %.2fs", video_runtime)
+        logger.info("  Model Runtime: %.2fs", output.model_runtime)
+        logger.info("  Num Frames:  %d", output.n_frames_used)
+        logger.info("  Tokens Generated: %d", tokens_generated)
 
         row = {
             "Run_ID": this_run,
@@ -471,14 +480,14 @@ def generate_timestamp() -> str:
 
 def generate_run_uuid() -> str:
     uid = str(uuid.uuid4())
-    print(f"Run ID: {uid}")
+    logger.info("Run ID: %s", uid)
     return uid
 
 
 def save_to_results_files(df: pd.DataFrame) -> None:
     results_file = code_root / "toxicainment_videos_log.jsonl"
     df.to_json(results_file, orient="records", lines=True, mode="a")
-    print(f"added line to {results_file}")
+    logger.info("added line to %s", results_file)
 
 
 def batch_process_dataset(
@@ -506,7 +515,7 @@ def batch_process_dataset(
 
 
 def run_benchmark(args: BenchmarkArgs) -> None:
-    print("ToxicAInment data used ...")
+    logger.info("ToxicAInment data used ...")
     videos, slides = get_posts(args.n_examples)
     video_paths: list[Path] = []
     slide_paths = []
@@ -541,7 +550,7 @@ def run_benchmark(args: BenchmarkArgs) -> None:
 if __name__ == "__main__":
     enable_info_logs()
     args = BenchmarkArgs()
-    print(args)
+    logger.info("%s", args)
     if args.profile:
         profiler = Profiler(interval=0.01)
         with profiler:
