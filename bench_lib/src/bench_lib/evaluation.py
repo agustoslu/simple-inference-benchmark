@@ -106,11 +106,11 @@ def krippendorf_alpha(post_ids: Iterable[str], responses: Iterable[Any]):
     return alpha
 
 
-def plot_krippendorf_alphas(alphas: list[float], questions: list[str]):
+def plot_scalars_for_questions(scalars: list[float], questions: list[str], title: str):
     fig = plt.figure(figsize=(4, 4))
-    plt.bar(questions, alphas)
+    plt.bar(questions, scalars)
     plt.xticks(rotation=45, ha="right")
-    plt.ylabel("Krippendorff's alpha")
+    plt.ylabel(title)
     plt.ylim(0, 1)
     plt.tight_layout()
     plt.grid()
