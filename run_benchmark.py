@@ -432,7 +432,7 @@ def process_dataset_by_row(
             "[%s] Initial Memory - Allocated: %.3f GB, Reserved: %.3f GB",
             video_path.name,
             initial_memory_allocated,
-            initial_memory_reserved
+            initial_memory_reserved,
         )
 
         output = model.process_video(video_path=video_path, meta_data=meta)
@@ -446,7 +446,7 @@ def process_dataset_by_row(
             "[%s] Peak Memory - Allocated: %.3f GB, Reserved: %.3f GB",
             video_path.name,
             peak_memory_allocated,
-            peak_memory_reserved
+            peak_memory_reserved,
         )
 
         logger.info("Finished %s", video_path.name)
