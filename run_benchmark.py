@@ -11,7 +11,7 @@ from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 import duckdb
 from download import DATASET_PATH, MP4_DATASET_PATH, read_prompt_template, code_root
-from bench_lib.utils import get_posts
+from bench_lib.utils import get_posts_df
 from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
 import uuid
@@ -472,9 +472,12 @@ def generate_run_uuid() -> str:
 
 
 def save_to_results_files(df: pd.DataFrame) -> None:
-    results_file = code_root / "toxicainment_videos_log.jsonl"
-    df.to_json(results_file, orient="records", lines=True, mode="a")
-    logger.info("added line to %s", results_file)
+    df.to_json(results_file(), orient="records", lines=True, mode="a")
+    logger.info("added line to %s", results_file())
+
+
+def results_file() -> Path:
+    return code_root / "toxicainment_videos_log.jsonl"
 
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
@@ -502,11 +505,8 @@ def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
 
 def run_benchmark(args: BenchmarkArgs) -> None:
     logger.info("ToxicAInment data used ...")
-    videos = get_posts(args.n_examples)
-    posts_df = pd.DataFrame(videos).T[
-        ["author_name", "video_description", "video_path"]
-    ]
-    posts_df = posts_df.assign(video_path=posts_df["video_path"].apply(Path))
+    posts_df = get_posts_df()
+    posts_df = posts_df.head(args.n_examples)
     benchmark_videos(args, posts_df)
 
 

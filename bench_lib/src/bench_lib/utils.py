@@ -14,32 +14,27 @@ def toxicainment_data_folder() -> Path:
     return Path(dss_home) / "toxicainment"
 
 
-def get_posts(n_examples: int = -1):
-    videos = {}
+def get_posts_df() -> pd.DataFrame:
     folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
     media_dir = folder / "media"
     posts_df = pd.read_csv(folder / "media_metadata.csv")
     posts_df["filenames"] = (
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )
-
-    for idx, row in posts_df.head(n_examples).iterrows():
-        filenames: list[str] = row["filenames"]
-        is_video: bool = filenames[0].endswith(".mp4")
-
-        if is_video:
-            video_path = media_dir / filenames[0]
-            assert video_path.exists(), video_path
-            videos[idx] = {
-                "video_path": str(video_path),
-                "author_name": row.get("author_name", "NA"),
-                "video_description": row.get("video_description", ""),
-            }
-
-        else:
-            logger.debug("Skipping non-video post %s", idx)
-
-    return videos
+    posts_df = posts_df.assign(
+        is_video=posts_df["filenames"].apply(lambda x: x[0].endswith(".mp4"))
+    )
+    logger.info(
+        "Dropping %d non-video posts out of %d",
+        len(posts_df.query("~is_video")),
+        len(posts_df),
+    )
+    posts_df = posts_df.query("is_video")
+    posts_df = posts_df.assign(
+        video_path=posts_df["filenames"].apply(lambda x: media_dir / x[0])
+    )
+    desired_cols = ["video_path", "author_name", "video_description"]
+    return posts_df[desired_cols]
 
 
 def get_labels():
@@ -110,10 +105,10 @@ def parse_output(log_path, model_labels_csv, model_id):
     model_labels = []
     unparsable_videos = []
 
-    videos = get_posts()
+    posts_df = get_posts_df()
     video_meta = {
         Path(v["video_path"]).name.replace(".mp4", ""): v["author_name"]
-        for v in videos.values()
+        for _, v in posts_df.iterrows()
     }
 
     pattern = re.compile(
