@@ -382,7 +382,7 @@ def benchmark_videos(args: BenchmarkArgs, posts_df: pd.DataFrame):
 def process_dataset_by_row_remotely(model: ModelInterface, posts_df: pd.DataFrame):
     this_run = generate_run_uuid()
 
-    for _, row in tqdm(list(posts_df.iterrows())):
+    for _, row in tqdm(list(posts_df.iterrows()), desc="Benchmarking model"):
         video_path = row["video_path"]
         logger.info("\nProcessing: %s", video_path)
 
@@ -401,6 +401,7 @@ def process_dataset_by_row_remotely(model: ModelInterface, posts_df: pd.DataFram
             "Total_Runtime": video_runtime,
             "Processed_Video": video_path.name,
             "Generations": output.response,
+            "video_id": row["video_id"],
         }
 
         df = pd.DataFrame([row])
@@ -455,6 +456,7 @@ def process_dataset_by_row(model: HuggingFaceModel, posts_df: pd.DataFrame):
             "Peak_Memory_Reserved": peak_memory_reserved,
             "Processed_Video": video_path.name,
             "Generations": output.response,
+            "video_id": row["video_id"],
         }
 
         df = pd.DataFrame([row])
@@ -499,6 +501,7 @@ def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
         "Total_Frames": [r.n_frames_used for r in results],
         "Processed_Video": [p.name for p in video_paths],
         "Generations": [r.response for r in results],
+        "video_id": posts_df["video_id"].tolist(),
     }
     df = pd.DataFrame(data)
     save_to_results_files(df)
@@ -515,8 +518,11 @@ def run_benchmark(args: BenchmarkArgs) -> None:
 
 def discard_posts_already_processed(posts_df: pd.DataFrame) -> pd.DataFrame:
     already_processed = pd.read_json(results_file(), orient="records", lines=True)
-    logger.info("Already processed %d posts", len(already_processed))
-    processed_ids = already_processed["Processed_Video"].str[-23:-4].astype(int)
+    logger.info(
+        "Already processed %d posts", already_processed["Processed_Video"].nunique()
+    )
+    # TODO: Replace this ID parsing with plain access to df["video_id"] (once all generations have it)
+    processed_ids = already_processed["Processed_Video"].str[-23:-4]
     posts_df = posts_df[~posts_df["video_id"].isin(processed_ids)]
     logger.info("%d posts remain to be processed", len(posts_df))
     return posts_df

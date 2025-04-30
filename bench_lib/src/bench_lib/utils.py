@@ -17,7 +17,7 @@ def toxicainment_data_folder() -> Path:
 def get_posts_df() -> pd.DataFrame:
     folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
     media_dir = folder / "media"
-    posts_df = pd.read_csv(folder / "media_metadata.csv")
+    posts_df = pd.read_csv(folder / "media_metadata.csv", dtype={"video_id": str})
     posts_df["filenames"] = (
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )
@@ -25,9 +25,10 @@ def get_posts_df() -> pd.DataFrame:
         is_video=posts_df["filenames"].apply(lambda x: x[0].endswith(".mp4"))
     )
     logger.info(
-        "Dropping %d non-video posts out of %d",
+        "Dropping %d non-video posts out of %d. Keeping %d posts.",
         len(posts_df.query("~is_video")),
         len(posts_df),
+        len(posts_df.query("is_video")),
     )
     posts_df = posts_df.query("is_video")
     posts_df = posts_df.assign(
