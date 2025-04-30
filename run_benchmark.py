@@ -369,10 +369,7 @@ def process_video_minicpm(
 
 
 def benchmark_videos(
-    args: BenchmarkArgs,
-    video_paths: list[Path],
-    meta_data: list[dict],
-    slide_meta_data: list[dict],
+    args: BenchmarkArgs, video_paths: list[Path], meta_data: list[dict]
 ):
     model = load_model(args)
     if args.use_vllm:
@@ -516,11 +513,9 @@ def batch_process_dataset(
 
 def run_benchmark(args: BenchmarkArgs) -> None:
     logger.info("ToxicAInment data used ...")
-    videos, slides = get_posts(args.n_examples)
+    videos = get_posts(args.n_examples)
     video_paths: list[Path] = []
-    slide_paths = []
     meta_data = []
-    slide_meta_data = []
 
     for v in videos:
         video_info = videos[v]
@@ -533,18 +528,7 @@ def run_benchmark(args: BenchmarkArgs) -> None:
             }
         )
 
-    for s in slides:
-        slide_info = slides[s]
-        slide_paths.append(slide_info["slide_path"])
-
-        slide_meta_data.append(
-            {
-                "author_name": slide_info["author_name"],
-                "slide_description": slide_info["slide_description"],
-            }
-        )
-
-    benchmark_videos(args, video_paths, meta_data, slide_meta_data)
+    benchmark_videos(args, video_paths, meta_data)
 
 
 if __name__ == "__main__":

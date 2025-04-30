@@ -1,10 +1,12 @@
 from pathlib import Path
 import pandas as pd
 from ast import literal_eval
-from collections import defaultdict
 import os
 import json
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def toxicainment_data_folder() -> Path:
@@ -14,7 +16,6 @@ def toxicainment_data_folder() -> Path:
 
 def get_posts(n_examples: int = -1):
     videos = {}
-    slides = defaultdict(list)
     folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
     media_dir = folder / "media"
     posts_df = pd.read_csv(folder / "media_metadata.csv")
@@ -36,22 +37,9 @@ def get_posts(n_examples: int = -1):
             }
 
         else:
-            has_audio_file = isinstance(row.get("audio_file"), str)
-            pic_paths = [media_dir / f for f in filenames]
-            pic_path_list = [str(pic_path) for pic_path in pic_paths]
+            logger.debug("Skipping non-video post %s", idx)
 
-            slides[idx] = {
-                "slide_path": pic_path_list,
-                "author_name": row.get("author_name", "NA"),
-                "slide_description": row.get("slide_description", ""),
-            }
-
-            if has_audio_file:
-                audio_path = media_dir / row["audio_file"]
-                assert audio_path.exists(), audio_path
-                slides[idx]["audio_file"] = str(audio_path)
-
-    return videos, slides
+    return videos
 
 
 def get_labels():
@@ -122,7 +110,7 @@ def parse_output(log_path, model_labels_csv, model_id):
     model_labels = []
     unparsable_videos = []
 
-    videos, _ = get_posts()
+    videos = get_posts()
     video_meta = {
         Path(v["video_path"]).name.replace(".mp4", ""): v["author_name"]
         for v in videos.values()
