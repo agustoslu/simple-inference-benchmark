@@ -1,8 +1,11 @@
+import os
+from pathlib import Path
 from typing import Any, Iterable
 import krippendorff
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.express as px
 from bench_lib.utils import Cols
 
 
@@ -47,6 +50,35 @@ def performance_by_category(labels_wide, ref_wide, questions: list[str]):
     return joined.groupby("variable", as_index=False)["is_correct"].mean()
 
 
+def compute_ai_perfs(
+    human_labels: pd.DataFrame, ai_labels: pd.DataFrame, questions: list[str]
+) -> pd.DataFrame:
+    return (
+        ai_labels.groupby("Model ID")
+        .apply(
+            performance_by_category,
+            ref_wide=human_labels,
+            questions=questions,
+            include_groups=False,
+        )
+        .reset_index()
+        .drop(columns=["level_1"])
+    )
+
+
+def plot_ai_perfs(ai_perfs, order: list[str], questions: list[str]):
+    fig = px.bar(
+        ai_perfs,
+        x="variable",
+        y="is_correct",
+        color="Model ID",
+        barmode="group",
+        category_orders={"Model ID": order, "variable": list(reversed(questions))},
+        color_discrete_sequence=px.colors.sequential.Viridis,
+    )
+    return fig
+
+
 def join_wides(labels_wide, ref_wide, questions: list[str]):
     joined = pd.merge(
         pd.melt(ref_wide, id_vars="post_id", value_vars=questions),
@@ -74,9 +106,9 @@ def load_ai_labels(
 ) -> pd.DataFrame:
     all_ai_labels = []
     for folder in folders:
-        ai_labels = pd.read_csv(
-            f"../results/{folder}/model_labels.csv", dtype={"post_id": str}
-        )
+        fpath = model_label_fpath(folder)
+        assert fpath.exists(), f"File {fpath} does not exist"
+        ai_labels = pd.read_csv(fpath, dtype={"post_id": str})
         ai_labels = ai_labels[
             [Cols.run_id, Cols.model_id, Cols.post_id, *questions, *comment_cols]
         ]
@@ -84,10 +116,21 @@ def load_ai_labels(
         print(f"{folder}: filtering {rows_w_na.sum()} rows with NA values")
         complete_ai_labels = ai_labels[~rows_w_na]
         print(f"{folder}: {len(complete_ai_labels)} rows after filtering")
-        all_ai_labels.append(complete_ai_labels.assign(model_id=folder))
+        all_ai_labels.append(complete_ai_labels)
 
     all_ai_labels = pd.concat(all_ai_labels)
     return all_ai_labels
+
+
+def model_label_fpath(folder: str) -> Path:
+    fpath = (
+        Path(os.environ["DSS_HOME"])
+        / "toxicainment"
+        / "simple_inference_benchmark_results"
+        / folder
+        / "model_labels.csv"
+    )
+    return fpath
 
 
 def difficulty_score(df: pd.DataFrame):

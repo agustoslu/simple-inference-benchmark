@@ -182,6 +182,8 @@ def get_answers_in_wide_format(raw_jsonl_lines: pd.DataFrame) -> pd.DataFrame:
     )
     df["post_id"] = df["Processed_Video"].str[-23:-4]
     assert df["Run_ID"].nunique() == 1, "There should be only one run id"
+    if isinstance(df["Generations"].values[0], list):
+        df = df.assign(Generations=df["Generations"].apply(lambda x: x[0]))
     answers_by_post = df["Generations"].str.extract(r"```json(.*)```", flags=re.DOTALL)[
         0
     ]
