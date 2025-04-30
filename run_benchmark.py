@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     profile: bool = False
-    model_id: str = "openbmb/MiniCPM-V-2_6"
+    model_id: str = "google/gemma-3-4b-it"
     n_examples: int = 2
     use_vllm: bool = False
     max_n_frames_per_video: int = 50
@@ -368,32 +368,25 @@ def process_video_minicpm(
     )
 
 
-def benchmark_videos(
-    args: BenchmarkArgs, video_paths: list[Path], meta_data: list[dict]
-):
+def benchmark_videos(args: BenchmarkArgs, posts_df: pd.DataFrame):
     model = load_model(args)
     if args.use_vllm:
-        batch_process_dataset(model=model, video_paths=video_paths, meta_data=meta_data)
+        batch_process_dataset(model=model, posts_df=posts_df)
     elif isinstance(model, HuggingFaceModel):
-        process_dataset_by_row(
-            model=model, video_paths=video_paths, meta_data=meta_data
-        )
+        process_dataset_by_row(model=model, posts_df=posts_df)
     else:  # Remote models like Gemini
-        process_dataset_by_row_remotely(
-            model=model, video_paths=video_paths, meta_data=meta_data
-        )
+        process_dataset_by_row_remotely(model=model, posts_df=posts_df)
 
 
-def process_dataset_by_row_remotely(
-    model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
-):
+def process_dataset_by_row_remotely(model: ModelInterface, posts_df: pd.DataFrame):
     this_run = generate_run_uuid()
 
-    for video_path, meta in tqdm(list(zip(video_paths, meta_data))):
-        logger.info("\nProcessing: %s", video_path.name)
+    for _, row in tqdm(list(posts_df.iterrows())):
+        video_path = row["video_path"]
+        logger.info("\nProcessing: %s", video_path)
 
         start_time = time.time()
-        output = model.process_video(video_path=video_path, meta_data=meta)
+        output = model.process_video(video_path=video_path, meta_data=row.to_dict())
         video_runtime = time.time() - start_time
 
         logger.info("Finished %s", video_path.name)
@@ -413,15 +406,12 @@ def process_dataset_by_row_remotely(
         save_to_results_files(df)
 
 
-def process_dataset_by_row(
-    model: HuggingFaceModel, video_paths: list[Path], meta_data: list[dict]
-):
+def process_dataset_by_row(model: HuggingFaceModel, posts_df: pd.DataFrame):
     this_run = generate_run_uuid()
 
-    for video_path, meta in tqdm(
-        zip(video_paths, meta_data), desc="Benchmarking model"
-    ):
-        logger.info("\nProcessing: %s", video_path.name)
+    for _, row in tqdm(list(posts_df.iterrows()), desc="Benchmarking model"):
+        video_path = row["video_path"]
+        logger.info("\nProcessing: %s", video_path)
         start_time = time.time()
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
         initial_memory_reserved = torch.cuda.memory_reserved() / 1e9
@@ -432,7 +422,7 @@ def process_dataset_by_row(
             initial_memory_reserved,
         )
 
-        output = model.process_video(video_path=video_path, meta_data=meta)
+        output = model.process_video(video_path=video_path, meta_data=row.to_dict())
         tokens_generated = len(model.tokenizer.tokenize(str((output.response))))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
@@ -487,13 +477,12 @@ def save_to_results_files(df: pd.DataFrame) -> None:
     logger.info("added line to %s", results_file)
 
 
-def batch_process_dataset(
-    model: ModelInterface, video_paths: list[Path], meta_data: list[dict]
-):
+def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
     assert isinstance(model, Gemma3vLLM), type(model)
     start_time = time.time()
+    video_paths = posts_df["video_path"]
     results: list[VideoOutput] = model.process_batch_of_videos(
-        video_paths=video_paths, meta_data=meta_data
+        video_paths=video_paths, meta_data=posts_df.to_dict(orient="records")
     )
     runtime = time.time() - start_time
     data = {
@@ -514,21 +503,11 @@ def batch_process_dataset(
 def run_benchmark(args: BenchmarkArgs) -> None:
     logger.info("ToxicAInment data used ...")
     videos = get_posts(args.n_examples)
-    video_paths: list[Path] = []
-    meta_data = []
-
-    for v in videos:
-        video_info = videos[v]
-        video_paths.append(Path(video_info["video_path"]))
-
-        meta_data.append(
-            {
-                "author_name": video_info["author_name"],
-                "video_description": video_info["video_description"],
-            }
-        )
-
-    benchmark_videos(args, video_paths, meta_data)
+    posts_df = pd.DataFrame(videos).T[
+        ["author_name", "video_description", "video_path"]
+    ]
+    posts_df = posts_df.assign(video_path=posts_df["video_path"].apply(Path))
+    benchmark_videos(args, posts_df)
 
 
 if __name__ == "__main__":
