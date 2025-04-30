@@ -33,7 +33,7 @@ def get_posts_df() -> pd.DataFrame:
     posts_df = posts_df.assign(
         video_path=posts_df["filenames"].apply(lambda x: media_dir / x[0])
     )
-    desired_cols = ["video_path", "author_name", "video_description"]
+    desired_cols = ["video_id", "video_path", "author_name", "video_description"]
     return posts_df[desired_cols]
 
 

@@ -38,6 +38,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     output_token_limit: int = 512
     compile: bool = False
     gpu_size: Literal["24GB", "80GB"] = "24GB"
+    restart: bool = False
 
 
 # Extract and sample videos
@@ -506,8 +507,19 @@ def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
 def run_benchmark(args: BenchmarkArgs) -> None:
     logger.info("ToxicAInment data used ...")
     posts_df = get_posts_df()
+    if args.restart:
+        posts_df = discard_posts_already_processed(posts_df)
     posts_df = posts_df.head(args.n_examples)
     benchmark_videos(args, posts_df)
+
+
+def discard_posts_already_processed(posts_df: pd.DataFrame) -> pd.DataFrame:
+    already_processed = pd.read_json(results_file(), orient="records", lines=True)
+    logger.info("Already processed %d posts", len(already_processed))
+    processed_ids = already_processed["Processed_Video"].str[-23:-4].astype(int)
+    posts_df = posts_df[~posts_df["video_id"].isin(processed_ids)]
+    logger.info("%d posts remain to be processed", len(posts_df))
+    return posts_df
 
 
 if __name__ == "__main__":
