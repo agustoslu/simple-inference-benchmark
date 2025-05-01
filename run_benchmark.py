@@ -7,6 +7,7 @@ import random
 from typing import Literal
 from bench_lib.utils import enable_info_logs
 import pandas as pd
+from pydantic import BaseModel
 import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
@@ -300,6 +301,7 @@ def load_gemini(args: BenchmarkArgs) -> Gemini:
         max_output_tokens=args.output_token_limit,
         location="us-central1",
         delete_files_after_use=False,
+        json_schema=SaxonyDeletedContentSchema,
     )
     return Gemini(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
 
@@ -313,6 +315,16 @@ def fill_prompt(meta_data: dict, prompt: str) -> str:
     slide_author = meta_data["video_description"]
     filled = prompt % (slide_desc, slide_author)
     return filled
+
+
+class Answer(BaseModel):
+    question: str
+    comment: str
+    answer: Literal["yes", "no"]
+
+
+class SaxonyDeletedContentSchema(BaseModel):
+    answers: list[Answer]
 
 
 def process_video_minicpm(
