@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 import random
 from typing import Literal
+from bench_lib.utils import enable_info_logs
 import pandas as pd
 import torch
 from tqdm import tqdm
@@ -195,14 +196,6 @@ class Gemini(ModelInterface):
             n_frames_used=None,  # Gemini handles video frames internally
             model_runtime=None,  # Remote API doesn't provide model runtime
         )
-
-
-def enable_info_logs() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
 
 
 def load_model(args: BenchmarkArgs) -> ModelInterface:

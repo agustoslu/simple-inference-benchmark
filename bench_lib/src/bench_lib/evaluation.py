@@ -5,8 +5,13 @@ import krippendorff
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import plotly.express as px
 from bench_lib.utils import Cols
+from sklearn.metrics import f1_score, precision_score, recall_score
+import logging
+import seaborn as sns
+
+
+logger = logging.getLogger(__name__)
 
 
 def visualize_runtime(df: pd.DataFrame) -> None:
@@ -47,13 +52,29 @@ def performance_by_category(labels_long, ref_long):
     """Both dfs are in long format. But the ref might be smaller than the labels."""
     assert set(["value", "variable", Cols.post_id]).issubset(labels_long.columns)
     assert set(["value", "variable", Cols.post_id]).issubset(ref_long.columns)
-    comparison = pd.merge(ref_long, labels_long, on=[Cols.post_id, "variable"])
-    comparison["is_correct"] = comparison["value_x"] == comparison["value_y"]
-    df = comparison.groupby("variable", as_index=False).agg(
-        is_correct=("is_correct", "mean"),
-        n_samples=("is_correct", "count"),
+    comparison = pd.merge(
+        ref_long, labels_long, on=[Cols.post_id, "variable"], suffixes=("_ref", "_pred")
     )
+    df = comparison.groupby("variable", as_index=False).apply(compute_metrics)
     return df
+
+
+def compute_metrics(x):
+    y_true = x["value_ref"]
+    y_pred = x["value_pred"]
+    accuracy = (y_true == y_pred).mean()
+    f1 = f1_score(y_true=y_true, y_pred=y_pred)
+    precision = precision_score(y_true=y_true, y_pred=y_pred)
+    recall = recall_score(y_true=y_true, y_pred=y_pred)
+    return pd.Series(
+        {
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "n_samples": len(y_true),
+        }
+    )
 
 
 def compute_ai_perfs(
@@ -68,26 +89,22 @@ def compute_ai_perfs(
     return df
 
 
-import seaborn as sns
-
-
-def plot_ai_perfs(ai_perfs, order: list[str], questions: list[str]):
+def plot_ai_perfs(ai_perfs, order: list[str], x_order: list[str], y: str):
     fig, ax = plt.subplots(figsize=(9, 4))
     sns.barplot(
         data=ai_perfs,
         x="variable",
-        y="is_correct",
+        y=y,
         hue=Cols.model_id,
         hue_order=order,
-        order=questions,
+        order=x_order,
         palette="viridis",
         ax=ax,
     )
     ax.set_xlabel("")  # Hide xlabel
-    ax.set_ylabel("Accuracy")
+    ax.set_ylabel(y.capitalize())
     ax.set_xticks(ax.get_xticks())
     ax.set_xticklabels(ax.get_xticklabels(), rotation=30, ha="right")
-    ax.set_yticklabels(ax.get_yticklabels())
     # Move legend outside to the right
     ax.legend(
         title=Cols.model_id,
@@ -126,9 +143,8 @@ def load_ai_labels(
     folders: list[str],
     questions: list[str],
     comment_cols: list[str],
-    long: bool = False,
 ) -> pd.DataFrame:
-    all_ai_labels = []
+    all_longs = []
     for folder in folders:
         fpath = model_label_fpath(folder)
         assert fpath.exists(), f"File {fpath} does not exist"
@@ -136,16 +152,29 @@ def load_ai_labels(
         ai_labels = ai_labels[
             [Cols.run_id, Cols.model_id, Cols.post_id, *questions, *comment_cols]
         ]
-        rows_w_na = ai_labels[questions].isna().any(axis=1)
-        print(f"{folder}: filtering {rows_w_na.sum()} rows with NA values")
-        complete_ai_labels = ai_labels[~rows_w_na]
-        print(f"{folder}: {len(complete_ai_labels)} rows after filtering")
-        all_ai_labels.append(complete_ai_labels)
+        long = ai_labels_wide_to_long(ai_labels, questions, comment_cols)
 
-    all_ai_labels = pd.concat(all_ai_labels)
-    if long:
-        return ai_labels_wide_to_long(all_ai_labels, questions, comment_cols)
-    return all_ai_labels
+        na_rows = long.query("value.isna()")
+        if len(na_rows) > 0:
+            logger.info("Removing %d rows with NA values", len(na_rows))
+            long.query("value.notna()", inplace=True)
+
+        long = long.assign(
+            value=lambda df: df["value"].map({"yes": 1, "no": 0, "0": 0, "1": 1})
+        )
+        not_yesno_rows = long.query("~value.isin((0, 1))")
+        if len(not_yesno_rows) > 0:
+            logger.info(
+                "Removing %d rows with answer different from yes/no values. E.g. '%s'",
+                len(not_yesno_rows),
+                not_yesno_rows["value"].values[0],
+            )
+            long.query("value.isin([0, 1])", inplace=True)
+
+        all_longs.append(long)
+
+    all_longs = pd.concat(all_longs)
+    return all_longs
 
 
 def ai_labels_wide_to_long(

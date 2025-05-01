@@ -241,3 +241,11 @@ class Cols:
     post_id = "post_id"
     run_id = "Run_ID"
     model_id = "Model ID"
+
+
+def enable_info_logs() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
