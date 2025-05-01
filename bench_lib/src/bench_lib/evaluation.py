@@ -43,39 +43,60 @@ def plot_question_hists(
         ax.grid(alpha=0.5)
 
 
-def performance_by_category(labels_wide, ref_wide, questions: list[str]):
-    """Both dfs are in wide format"""
-    assert set(["post_id", *questions]).issubset(labels_wide.columns)
-    joined = join_wides(labels_wide, ref_wide, questions)
-    return joined.groupby("variable", as_index=False)["is_correct"].mean()
+def performance_by_category(labels_long, ref_long):
+    """Both dfs are in long format. But the ref might be smaller than the labels."""
+    assert set(["value", "variable", Cols.post_id]).issubset(labels_long.columns)
+    assert set(["value", "variable", Cols.post_id]).issubset(ref_long.columns)
+    comparison = pd.merge(ref_long, labels_long, on=[Cols.post_id, "variable"])
+    comparison["is_correct"] = comparison["value_x"] == comparison["value_y"]
+    df = comparison.groupby("variable", as_index=False).agg(
+        is_correct=("is_correct", "mean"),
+        n_samples=("is_correct", "count"),
+    )
+    return df
 
 
 def compute_ai_perfs(
     human_labels: pd.DataFrame, ai_labels: pd.DataFrame, questions: list[str]
 ) -> pd.DataFrame:
-    return (
-        ai_labels.groupby("Model ID")
-        .apply(
-            performance_by_category,
-            ref_wide=human_labels,
-            questions=questions,
-            include_groups=False,
-        )
-        .reset_index()
-        .drop(columns=["level_1"])
+    """both input dfs are in long format"""
+    df = ai_labels.groupby(Cols.model_id).apply(
+        performance_by_category,
+        ref_long=human_labels,
     )
+    df = df.reset_index().drop(columns=["level_1"])
+    return df
+
+
+import seaborn as sns
 
 
 def plot_ai_perfs(ai_perfs, order: list[str], questions: list[str]):
-    fig = px.bar(
-        ai_perfs,
+    fig, ax = plt.subplots(figsize=(9, 4))
+    sns.barplot(
+        data=ai_perfs,
         x="variable",
         y="is_correct",
-        color="Model ID",
-        barmode="group",
-        category_orders={"Model ID": order, "variable": list(reversed(questions))},
-        color_discrete_sequence=px.colors.sequential.Viridis,
+        hue=Cols.model_id,
+        hue_order=order,
+        order=questions,
+        palette="viridis",
+        ax=ax,
     )
+    ax.set_xlabel("")  # Hide xlabel
+    ax.set_ylabel("Accuracy")
+    ax.set_xticks(ax.get_xticks())
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=30, ha="right")
+    ax.set_yticklabels(ax.get_yticklabels())
+    # Move legend outside to the right
+    ax.legend(
+        title=Cols.model_id,
+        bbox_to_anchor=(1.0, 1),
+        loc="upper left",
+    )
+    ax.grid(alpha=0.5)
+    plt.tight_layout()
+    plt.close()  # Close the figure to prevent double display
     return fig
 
 
@@ -102,7 +123,10 @@ def get_means(labels_df: pd.DataFrame, question: str):
 
 
 def load_ai_labels(
-    folders: list[str], questions: list[str], comment_cols: list[str]
+    folders: list[str],
+    questions: list[str],
+    comment_cols: list[str],
+    long: bool = False,
 ) -> pd.DataFrame:
     all_ai_labels = []
     for folder in folders:
@@ -119,7 +143,26 @@ def load_ai_labels(
         all_ai_labels.append(complete_ai_labels)
 
     all_ai_labels = pd.concat(all_ai_labels)
+    if long:
+        return ai_labels_wide_to_long(all_ai_labels, questions, comment_cols)
     return all_ai_labels
+
+
+def ai_labels_wide_to_long(
+    ai_labels: pd.DataFrame, questions: list[str], comment_cols: list[str]
+) -> pd.DataFrame:
+    id_vars = [Cols.post_id, Cols.run_id, Cols.model_id]
+    ans = ai_labels.melt(
+        id_vars=id_vars,
+        value_vars=questions,
+    )
+    comms = ai_labels.melt(
+        id_vars=id_vars,
+        value_vars=comment_cols,
+        value_name="comment",
+    ).assign(variable=lambda df: df["variable"].str.replace("_comment", ""))
+    long = pd.merge(ans, comms, on=id_vars + ["variable"])
+    return long
 
 
 def model_label_fpath(folder: str) -> Path:
@@ -149,12 +192,17 @@ def krippendorf_alpha(post_ids: Iterable[str], responses: Iterable[Any]):
     return alpha
 
 
-def plot_scalars_for_questions(scalars: list[float], questions: list[str], title: str):
+def plot_scalars_for_questions(
+    scalars: list[float], questions: list[str], title: str, x_reversed: bool = False
+):
+    if x_reversed:
+        questions = list(reversed(questions))
+        scalars = list(reversed(scalars))
     fig = plt.figure(figsize=(4, 4))
     plt.bar(questions, scalars)
-    plt.xticks(rotation=45, ha="right")
+    plt.xticks(rotation=30, ha="right")
     plt.ylabel(title)
-    plt.ylim(0, 1)
+    plt.ylim(0, max(1, max(scalars) * 1.1))
     plt.tight_layout()
     plt.grid()
     plt.close()  # Close the figure to prevent double display

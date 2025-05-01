@@ -9,6 +9,7 @@ profiles/
 backup/
 results/
 logs/
+notebooks/imgs/
 *.out
 *.err
 
