@@ -322,10 +322,8 @@ def calc_bertscore(preds: list[str], refs: list[str]) -> float:
 
 
 def bertscore_alignment(
-    df: pd.DataFrame,
-    reference_model_id: str = "Qwen/Qwen2.5-VL-72B-Instruct"
+    df: pd.DataFrame, reference_model_id: str = "Qwen/Qwen2.5-VL-72B-Instruct"
 ) -> pd.DataFrame:
-    
     COMMENT_CATEGORIES = [
         "is_eudaimonic_entertainment_comment",
         "is_hedonic_entertainment_comment",
@@ -356,7 +354,9 @@ def bertscore_alignment(
                 ref_comment = ref_row[category].values[0]
                 model_comment = model_row[category].values[0]
 
-                if not isinstance(ref_comment, str) or not isinstance(model_comment, str):
+                if not isinstance(ref_comment, str) or not isinstance(
+                    model_comment, str
+                ):
                     continue
                 if not ref_comment.strip() or not model_comment.strip():
                     continue
@@ -367,17 +367,18 @@ def bertscore_alignment(
                     valid_categories += 1
 
             if valid_categories:
-                per_model_scores.append({
+                per_model_scores.append(
+                    {
                     "post_id": post_id,
                     "compared_model_id": model_id,
-                    "bertscore_alignment": total_score / valid_categories
-                })
+                        "bertscore_alignment": total_score / valid_categories,
+                    }
+                )
 
     model_score_df = pd.DataFrame(per_model_scores)
 
     overall_alignment_df = (
-        model_score_df
-        .groupby("compared_model_id")["bertscore_alignment"]
+        model_score_df.groupby("compared_model_id")["bertscore_alignment"]
         .mean()
         .reset_index()
         .rename(columns={"bertscore_alignment": "overall_alignment"})
@@ -386,22 +387,28 @@ def bertscore_alignment(
     return overall_alignment_df
 
 
-def plot_alignment_table(df: pd.DataFrame, reference_label: str = "Qwen 72B (reference)") -> plt.Figure:
-    
+def plot_alignment_table(
+    df: pd.DataFrame, reference_label: str = "Qwen 72B (reference)"
+) -> plt.Figure:
     df_sorted = df.sort_values("overall_alignment", ascending=False)
-    table_data = [[model, f"{score:.4f}"] for model, score in zip(df_sorted["compared_model_id"], df_sorted["overall_alignment"])]
+    table_data = [
+        [model, f"{score:.4f}"]
+        for model, score in zip(
+            df_sorted["compared_model_id"], df_sorted["overall_alignment"]
+        )
+    ]
 
     col_labels = ["BERTScore", reference_label]
 
     fig, ax = plt.subplots(figsize=(6, 1 + 0.4 * len(table_data)))
-    ax.axis('off')
+    ax.axis("off")
 
     table = ax.table(
         cellText=table_data,
         colLabels=col_labels,
-        cellLoc='center',
-        loc='center',
-        colWidths=[0.5, 0.5]
+        cellLoc="center",
+        loc="center",
+        colWidths=[0.5, 0.5],
     )
 
     table.auto_set_font_size(False)
@@ -411,7 +418,7 @@ def plot_alignment_table(df: pd.DataFrame, reference_label: str = "Qwen 72B (ref
     for (row, col), cell in table.get_celld().items():
         if row == 0:
             cell.set_fontsize(13)
-            cell.set_text_props(weight='bold')
+            cell.set_text_props(weight="bold")
             cell.set_facecolor("#f0f0f0")
 
     plt.tight_layout()
