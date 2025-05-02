@@ -41,3 +41,6 @@ pyinstrument
 
 # settings
 pydantic-settings
+
+# parsing LLM output
+json_repair

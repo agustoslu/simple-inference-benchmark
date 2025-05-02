@@ -1,4 +1,5 @@
 from pathlib import Path
+from json_repair import json_repair
 import pandas as pd
 from ast import literal_eval
 import os
@@ -182,16 +183,15 @@ def get_answers_in_wide_format(raw_jsonl_lines: pd.DataFrame) -> pd.DataFrame:
     )
     df["post_id"] = df["Processed_Video"].str[-23:-4]
     assert df["Run_ID"].nunique() == 1, "There should be only one run id"
-    if isinstance(df["Generations"].values[0], list):
-        df = df.assign(Generations=df["Generations"].apply(lambda x: x[0]))
-    answers_by_post = df["Generations"].str.extract(r"```json(.*)```", flags=re.DOTALL)[
-        0
-    ]
     dfs = []
     unparsable = []
     for i, row in df.iterrows():
         try:
-            answers = json.loads(answers_by_post[i])["answers"]
+            gens = row["Generations"]
+            if isinstance(gens, list):
+                gens = gens[0]
+            assert isinstance(gens, str), f"Generations must be a str, not {type(gens)}"
+            answers = json_repair.loads(gens)["answers"]
             extra_data = {
                 Cols.run_id: row[Cols.run_id],
                 Cols.model_id: row[Cols.model_id],
