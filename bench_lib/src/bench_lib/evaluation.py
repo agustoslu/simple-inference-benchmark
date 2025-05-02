@@ -9,6 +9,7 @@ from bench_lib.utils import Cols
 from sklearn.metrics import f1_score, precision_score, recall_score
 import logging
 import seaborn as sns
+from bert_score import score
 
 
 logger = logging.getLogger(__name__)
@@ -313,3 +314,73 @@ def fleiss_kappa(table, method="fleiss"):
 
     kappa = (p_mean - p_mean_exp) / (1 - p_mean_exp)
     return kappa, p_rat
+
+
+def calc_bertscore(preds: list[str], refs: list[str]) -> float:
+    P, R, F1 = score(preds, refs, lang="en", verbose=False, device="cuda")
+    return np.mean(F1.tolist())
+
+
+def bertscore_alignment(
+    df: pd.DataFrame,
+    reference_model_id: str = "Qwen/Qwen2.5-VL-72B-Instruct"
+) -> pd.DataFrame:
+    
+    COMMENT_CATEGORIES = [
+        "is_eudaimonic_entertainment_comment",
+        "is_hedonic_entertainment_comment",
+        "is_intolerant_comment",
+        "is_political_comment",
+        "is_saxony_comment",
+    ]
+
+    per_model_scores = []
+
+    for post_id, group in df.groupby("post_id"):
+        ref_row = group[group["Model ID"] == reference_model_id]
+        if ref_row.empty:
+            continue
+
+        for model_id in group["Model ID"].unique():
+            if model_id == reference_model_id:
+                continue
+
+            model_row = group[group["Model ID"] == model_id]
+            if model_row.empty:
+                continue
+
+            total_score = 0
+            valid_categories = 0
+
+            for category in COMMENT_CATEGORIES:
+                ref_comment = ref_row[category].values[0]
+                model_comment = model_row[category].values[0]
+
+                if not isinstance(ref_comment, str) or not isinstance(model_comment, str):
+                    continue
+                if not ref_comment.strip() or not model_comment.strip():
+                    continue
+
+                score_val = calc_bertscore([model_comment], [ref_comment])
+                if not np.isnan(score_val):
+                    total_score += score_val
+                    valid_categories += 1
+
+            if valid_categories:
+                per_model_scores.append({
+                    "post_id": post_id,
+                    "compared_model_id": model_id,
+                    "bertscore_alignment": total_score / valid_categories
+                })
+
+    model_score_df = pd.DataFrame(per_model_scores)
+
+    overall_alignment_df = (
+        model_score_df
+        .groupby("compared_model_id")["bertscore_alignment"]
+        .mean()
+        .reset_index()
+        .rename(columns={"bertscore_alignment": "overall_alignment"})
+    )
+
+    return overall_alignment_df
