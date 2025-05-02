@@ -301,7 +301,7 @@ def load_gemini(args: BenchmarkArgs) -> Gemini:
         max_output_tokens=args.output_token_limit,
         location="us-central1",
         delete_files_after_use=False,
-        json_schema=SaxonyDeletedContentSchema,
+        json_schema=None,  # SaxonyDeletedContentSchema,
     )
     return Gemini(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
 
