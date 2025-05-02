@@ -384,3 +384,36 @@ def bertscore_alignment(
     )
 
     return overall_alignment_df
+
+
+def plot_alignment_table(df: pd.DataFrame, reference_label: str = "Qwen 72B (reference)") -> plt.Figure:
+    
+    df_sorted = df.sort_values("overall_alignment", ascending=False)
+    table_data = [[model, f"{score:.4f}"] for model, score in zip(df_sorted["compared_model_id"], df_sorted["overall_alignment"])]
+
+    col_labels = ["BERTScore", reference_label]
+
+    fig, ax = plt.subplots(figsize=(6, 1 + 0.4 * len(table_data)))
+    ax.axis('off')
+
+    table = ax.table(
+        cellText=table_data,
+        colLabels=col_labels,
+        cellLoc='center',
+        loc='center',
+        colWidths=[0.5, 0.5]
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1, 1.5)
+
+    for (row, col), cell in table.get_celld().items():
+        if row == 0:
+            cell.set_fontsize(13)
+            cell.set_text_props(weight='bold')
+            cell.set_facecolor("#f0f0f0")
+
+    plt.tight_layout()
+    plt.close()
+    return fig
