@@ -29,6 +29,7 @@ def visualize_runtime(df: pd.DataFrame) -> None:
     ax.set_ylabel("Model Runtime")
     ax.grid(alpha=0.5)
     fig.tight_layout()
+    plt.close()  # Close the figure to prevent double display
     return fig
 
 
@@ -196,14 +197,16 @@ def ai_labels_wide_to_long(
 
 
 def model_label_fpath(folder: str) -> Path:
-    fpath = (
+    fpath = benchmark_results_folder() / folder / "model_labels.csv"
+    return fpath
+
+
+def benchmark_results_folder() -> Path:
+    return (
         Path(os.environ["DSS_HOME"])
         / "toxicainment"
         / "simple_inference_benchmark_results"
-        / folder
-        / "model_labels.csv"
     )
-    return fpath
 
 
 def difficulty_score(df: pd.DataFrame):
@@ -369,8 +372,8 @@ def bertscore_alignment(
             if valid_categories:
                 per_model_scores.append(
                     {
-                    "post_id": post_id,
-                    "compared_model_id": model_id,
+                        "post_id": post_id,
+                        "compared_model_id": model_id,
                         "bertscore_alignment": total_score / valid_categories,
                     }
                 )
