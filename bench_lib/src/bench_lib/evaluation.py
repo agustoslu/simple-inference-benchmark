@@ -427,3 +427,66 @@ def plot_alignment_table(
     plt.tight_layout()
     plt.close()
     return fig
+
+
+def count_label_flips_per_post(merged_df: pd.DataFrame, label: str, n_runs: int) -> pd.Series:
+        label_cols = [f"{label}_run{i}" for i in range(n_runs)]
+        existing_cols = [col for col in label_cols if col in merged_df.columns]
+        label_data = merged_df[existing_cols]
+        diffs = label_data.diff(axis=1).abs() # column-wise absolute differences among runs
+        return diffs.apply(lambda row: row.sum(), axis=1)
+
+
+def check_self_consistency(
+    csv_paths: list[str],
+    model_to_check: str,
+    n_runs: int,
+) -> pd.DataFrame:
+
+    LABEL_CATEGORIES = [
+        "is_eudaimonic_entertainment",
+        "is_hedonic_entertainment",
+        "is_intolerant",
+        "is_political",
+        "is_saxony",
+    ]
+
+    model_labels_dfs = []
+
+    # we add another run_id for number of experiments
+    for run_id, path in enumerate(csv_paths):
+        df = pd.read_csv(path)
+        model_df = df[df["Model ID"] == model_to_check].copy()
+        model_df["run_id"] = run_id
+        model_df = model_df.dropna(subset=LABEL_CATEGORIES)
+        for category in LABEL_CATEGORIES:
+            model_df = model_df[model_df[category].notna()]
+            model_df[category] = model_df[category].replace(
+                {'no': 0, 'No': 0, '0': 0, 'yes': 1, 'Yes': 1, '1': 1}
+            ).astype(int)
+        if not model_df.empty:
+            model_labels_dfs.append(
+            model_df[["post_id", "run_id"] + LABEL_CATEGORIES]
+        )
+
+
+    wide_dfs = []
+    for run_id, df in enumerate(model_labels_dfs):
+        wide_df = df.set_index("post_id")[LABEL_CATEGORIES].add_suffix(f"_run{run_id}")
+        wide_dfs.append(wide_df)
+
+    merged = pd.concat(wide_dfs, axis=1, join="outer")
+
+    flip_counts_all = pd.DataFrame(index=merged.index)
+
+    # calculate flip counts per post for the given model
+    for label in LABEL_CATEGORIES:
+        flip_counts_all[f"{label}_flip_count"] = count_label_flips_per_post(merged, label, n_runs)
+
+    flip_counts_all = flip_counts_all.reset_index()
+    flip_count_cols = [f"{label}_flip_count" for label in LABEL_CATEGORIES]
+    total_flips = flip_counts_all[flip_count_cols].sum().sum()
+    max_possible_flips = (n_runs - 1) * len(LABEL_CATEGORIES) * len(flip_counts_all)
+    consistency_score = 1 - (total_flips / max_possible_flips)
+
+    return flip_counts_all, consistency_score
