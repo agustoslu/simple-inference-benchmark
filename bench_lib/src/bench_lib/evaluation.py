@@ -572,7 +572,6 @@ def load_human_labels() -> tuple[pd.DataFrame, list[str], list[str]]:
         .last()
         .reset_index()
     )
-    print(len(human_labels))
     # join num raters per post
     nraters_by_post = (
         human_labels.groupby("post_id", as_index=False)["classification_by"]
@@ -596,12 +595,11 @@ def load_human_labels() -> tuple[pd.DataFrame, list[str], list[str]]:
     return human_labels, questions, comment_cols
 
 
-def compute_human_consistency(
-    human_labels: pd.DataFrame, questions: list[str]
+def compute_agreement_score(
+    labels_long: pd.DataFrame, groupby=["post_id", "variable"]
 ) -> pd.DataFrame:
-    return pd.melt(
-        (human_labels.groupby("post_id")[questions].nunique() == 1).reset_index(),
-        id_vars="post_id",
-        value_vars=questions,
-        value_name="human_consistent",
+    return (
+        labels_long.groupby(groupby, as_index=False)
+        .agg(agreement_score=("value", agreement_score))
+        .assign(full_agreement=lambda df: df["agreement_score"] == 1)
     )
