@@ -1,23 +1,19 @@
-import os
 from pathlib import Path
-
+from bench_lib.evaluation import benchmark_results_folder
 import pandas as pd
 from bench_lib.utils import get_answers_in_wide_format
+from tqdm import tqdm
 
 
 def parse_and_dump_labels(folder: str):
-    root_dir = (
-        Path(os.environ["DSS_HOME"])
-        / "toxicainment/simple_inference_benchmark_results"
-        / folder
-    )
+    root_dir = benchmark_results_folder() / folder
     jsonl_path = root_dir / "toxicainment_videos_log.jsonl"
     assert Path(jsonl_path).exists(), jsonl_path
     df = pd.read_json(jsonl_path, orient="records", lines=True)
 
     wides = []
     unparsables = []
-    for run_id, group_df in df.groupby("Run_ID"):
+    for run_id, group_df in tqdm(list(df.groupby("Run_ID"))):
         wide_df, unparsable = get_answers_in_wide_format(raw_jsonl_lines=group_df)
         wides.append(wide_df)
         unparsables.append(unparsable)
