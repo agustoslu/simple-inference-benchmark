@@ -15,68 +15,51 @@ from matplotlib import gridspec
 logger = logging.getLogger(__name__)
 
 
-def plot_runtime_side_by_side(
-    rtmetrics_model1: pd.DataFrame,
-    rtmetrics_model2: pd.DataFrame,
-    title1: str = "",
-    title2: str = "",
-) -> plt.Figure:
-    fig = plt.figure(figsize=(8, 3))
-    gs = gridspec.GridSpec(1, 3, width_ratios=[1, 1, 0.05], wspace=0.3)
-
-    xmax = max(
-        rtmetrics_model1["Tokens_Generated"].max(),
-        rtmetrics_model2["Tokens_Generated"].max(),
-    )
-    ymax = max(
-        rtmetrics_model1["Model_Runtime"].max(),
-        rtmetrics_model2["Model_Runtime"].max(),
-    )
-    ax1 = fig.add_subplot(gs[0], xlim=(0, xmax), ylim=(0, ymax))
-    ax2 = fig.add_subplot(gs[1], xlim=(0, xmax), ylim=(0, ymax))
-    visualize_runtime(
-        rtmetrics_model1,
-        figax=(fig, ax1),
-        plot_colorbar=False,
-        title=title1,
-    )
-    _, scatter = visualize_runtime(
-        rtmetrics_model2,
-        figax=(fig, ax2),
-        plot_ylabel=False,
-        plot_colorbar=False,
-        title=title2,
-    )
-
-    scatter_cb = ax1.scatter([], [], c=[], cmap=scatter.cmap, norm=scatter.norm)
-    cbar = fig.colorbar(scatter_cb, cax=fig.add_subplot(gs[2]))
-    cbar.set_label("Input Frames Per Video")
-    return fig
-
-
 def visualize_runtime(
     df: pd.DataFrame,
     figax=None,
     plot_colorbar: bool = True,
     plot_ylabel: bool = True,
     title: str = "",
+    hue: str = "Total_Frames",
 ) -> tuple[plt.Figure, plt.Axes]:
     # The model takes longer for more input frames and for more output tokens generated
     if figax is None:
-        fig = plt.figure(figsize=(6, 4))
-        ax = fig.add_subplot(111)
+        fig = plt.figure(figsize=(7, 4))
+        gs = gridspec.GridSpec(1, 2, width_ratios=[1, 0.05], wspace=0.3)
+        ax = fig.add_subplot(gs[0])
     else:
         fig, ax = figax
 
-    # Create scatter plot with alpha
-    scatter = ax.scatter(
-        df["Tokens_Generated"], df["Model_Runtime"], c=df["Total_Frames"], alpha=0.5
+    scatter = sns.scatterplot(
+        data=df,
+        x="Tokens_Generated",
+        y="Model_Runtime",
+        hue=hue,
+        # alpha=0.5,
+        palette=None if hue == Cols.model_id else "viridis",
+        ax=ax,
+        legend=not plot_colorbar,
     )
 
+    # Get the scatter points for colorbar reference
+    scatter_points = ax.collections[0]
+
     if plot_colorbar:
-        # Create a separate scatter plot so that the colorbar is not affected by the alpha
-        scatter_cb = ax.scatter([], [], c=[], cmap=scatter.cmap, norm=scatter.norm)
-        _ = fig.colorbar(scatter_cb, ax=ax, label="Input Frames Per Video")
+        # separate scatter need for correct colorbar range (otherwise (0, 1) is used)
+        scatter_cb = ax.scatter(
+            [],
+            [],
+            c=[],
+            cmap="viridis",
+            norm=scatter_points.norm,
+            clim=(df[hue].min(), df[hue].max()),
+        )
+        cbar = fig.colorbar(
+            scatter_cb,
+            cax=fig.add_subplot(gs[1]),
+            label="Input Frames Per Video",
+        )
 
     if title != "":
         ax.set_title(title)
@@ -87,9 +70,9 @@ def visualize_runtime(
     if plot_ylabel:
         ax.set_ylabel("Model Runtime")
     ax.grid(alpha=0.5)
-    fig.tight_layout()
+    # fig.tight_layout()
     plt.close()  # Close the figure to prevent double display
-    return fig, scatter
+    return fig, scatter_points
 
 
 def plot_question_hists(
