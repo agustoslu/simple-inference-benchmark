@@ -534,3 +534,13 @@ def check_self_consistency(
     consistency_score = 1 - (total_flips / max_possible_flips)
 
     return flip_counts_all, consistency_score
+
+if __name__ == "__main__":
+
+    model_labels_dir = Path("./model_labels")
+    csv_paths_files: list[str] = [str(p) for p in model_labels_dir.glob("*model_labels.csv")]
+    df_result, final_score = check_self_consistency(
+    csv_paths=csv_paths_files,
+    model_to_check="google/gemma-3-4b-it",
+    n_runs=5,
+)
