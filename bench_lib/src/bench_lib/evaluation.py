@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 import krippendorff
 import numpy as np
 import pandas as pd
@@ -535,12 +535,73 @@ def check_self_consistency(
 
     return flip_counts_all, consistency_score
 
-if __name__ == "__main__":
 
-    model_labels_dir = Path("./model_labels")
-    csv_paths_files: list[str] = [str(p) for p in model_labels_dir.glob("*model_labels.csv")]
-    df_result, final_score = check_self_consistency(
-    csv_paths=csv_paths_files,
-    model_to_check="google/gemma-3-4b-it",
-    n_runs=5,
-)
+def agreement_score(xs: Sequence[int]):
+    """
+    Calculates an agreement rating for a list of binary values (0 or 1)
+    based on the proportion of the minority element.
+
+    Args:
+      xs: A pandas Series containing only 0s and 1s.
+
+    Returns:
+      A float between 0 and 1 representing the agreement rating.
+      1 indicates full agreement, 0 indicates maximum disagreement.
+    """
+    zeros, ones = np.bincount(xs, minlength=2)
+    total = len(xs)
+    score = 1 - (2 * min(zeros, ones) / total)
+    return score
+
+
+def load_human_labels() -> tuple[pd.DataFrame, list[str], list[str]]:
+    fpath = (
+        Path(os.environ["DSS_HOME"])
+        / "toxicainment/2025-02-07-saxony-labeled-data/human-labels.csv"
+    )
+    human_labels = pd.read_csv(fpath, dtype={"post_id": str})
+    human_labels = (
+        human_labels.sort_values(by="timestamp")
+        .rename(
+            columns={
+                "is_saxony_election": "is_saxony",
+                "is_saxony_election_comment": "is_saxony_comment",
+            }
+        )  # The column name was wrong while saving, but the UI correctly displayed that it does not HAVE to be politics in saxony
+        .groupby(["post_id", "classification_by"])
+        .last()
+        .reset_index()
+    )
+    print(len(human_labels))
+    # join num raters per post
+    nraters_by_post = (
+        human_labels.groupby("post_id", as_index=False)["classification_by"]
+        .agg(["nunique"])
+        .rename(columns={"nunique": "nraters"})
+    )
+    human_labels = pd.merge(human_labels, nraters_by_post, on="post_id", how="left")
+
+    questions = [
+        "is_political",
+        "is_saxony",
+        "is_intolerant",
+        "is_hedonic_entertainment",
+        "is_eudaimonic_entertainment",
+    ]
+    comment_cols = [f"{col}_comment" for col in questions]
+    human_labels[questions] = human_labels[questions].apply(
+        lambda s: s.map({"yes": 1, "no": 0, "0": 0, "1": 1})
+    )
+
+    return human_labels, questions, comment_cols
+
+
+def compute_human_consistency(
+    human_labels: pd.DataFrame, questions: list[str]
+) -> pd.DataFrame:
+    return pd.melt(
+        (human_labels.groupby("post_id")[questions].nunique() == 1).reset_index(),
+        id_vars="post_id",
+        value_vars=questions,
+        value_name="human_consistent",
+    )
