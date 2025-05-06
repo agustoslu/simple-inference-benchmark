@@ -554,7 +554,7 @@ def agreement_score(xs: Sequence[int]):
     return score
 
 
-def load_human_labels() -> tuple[pd.DataFrame, list[str], list[str]]:
+def load_human_labels(long: bool = False) -> tuple[pd.DataFrame, list[str], list[str]]:
     fpath = (
         Path(os.environ["DSS_HOME"])
         / "toxicainment/2025-02-07-saxony-labeled-data/human-labels.csv"
@@ -591,6 +591,15 @@ def load_human_labels() -> tuple[pd.DataFrame, list[str], list[str]]:
     human_labels[questions] = human_labels[questions].apply(
         lambda s: s.map({"yes": 1, "no": 0, "0": 0, "1": 1})
     )
+    if long:
+        id_cols = ["post_id", "classification_by"]
+        answers = human_labels.melt(id_vars=id_cols, value_vars=questions)
+        comments = human_labels.melt(
+            id_vars=id_cols, value_vars=comment_cols, value_name="comment"
+        )
+        comments["variable"] = comments["variable"].str.replace("_comment", "")
+        human_labels = pd.merge(answers, comments, on=id_cols + ["variable"])
+        pass
 
     return human_labels, questions, comment_cols
 
