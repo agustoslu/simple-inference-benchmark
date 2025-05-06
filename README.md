@@ -20,6 +20,12 @@ python run_benchmark.py --model_id="openbmb/MiniCPM-V-2_6" --n_examples=300
 python run_benchmark.py --model_id="google/gemma-3-4b-it" --n_examples=300
 ```
 
+Run a test experiment on 24 GB GPU and using vLLM
+
+```bash
+python run_benchmark.py --use_vllm=True --max_n_frames_per_video=10 --model_id=Qwen/Qwen2.5-VL-3B-Instruct --vllm_max_model_len=16384
+```
+
 Run the experiment in a slurm job
 ```bash
 sbatch enroot_test.sbatch

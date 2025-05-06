@@ -14,8 +14,11 @@
             //     "DSS_HOME": "/teamspace/studios/this_studio/dss_home"
             // },
             "args": [
-                "--model_id=google/gemini-2.0-flash-001",
-                "--n_examples=2"
+                "--use_vllm=True",
+                "--max_n_frames_per_video=10",
+                "--model_id=Qwen/Qwen2.5-VL-3B-Instruct",
+                "--vllm_max_model_len=16384",
+                "--n_examples=50"
             ],
             "justMyCode": false
         }

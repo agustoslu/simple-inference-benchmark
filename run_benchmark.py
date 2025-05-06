@@ -22,7 +22,7 @@ import logging
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
-from llmlib.gemma3_vllm import Gemma3vLLM as Gemma3vLLM_llmlib, Conversation
+from llmlib.vllm_model import ModelvLLM, Conversation
 from llmlib.qwen2_5 import Qwen2_5
 from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
@@ -41,6 +41,8 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     compile: bool = False
     gpu_size: Literal["24GB", "80GB"] = "24GB"
     restart: bool = False
+
+    vllm_max_model_len: int = 8192
 
 
 # Extract and sample videos
@@ -123,8 +125,8 @@ class Gemma3Hf(HuggingFaceModel):
 
 
 @dataclass
-class Gemma3vLLM(ModelInterface):
-    llmlib_model: Gemma3vLLM_llmlib
+class ModelvLLM_Benchmark(ModelInterface):
+    llmlib_model: ModelvLLM
 
     def process_batch_of_videos(
         self, video_paths: list[Path], meta_data: list[dict]
@@ -207,11 +209,11 @@ def load_model(args: BenchmarkArgs) -> ModelInterface:
     # if model_id == minicpm_omni.model_id:
     #     return minicpm_omni.load_model()
 
+    if args.use_vllm:
+        return load_vllm_model(args)
+
     if "gemma-3" in model_id:
-        if args.use_vllm:
-            return load_gemma3_vllm(args)
-        else:  # use huggingface
-            return load_gemma3_huggingface(args)
+        return load_gemma3_huggingface(args)
 
     if "Qwen" in model_id:
         return load_qwen(args)
@@ -253,14 +255,17 @@ def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
     )
 
 
-def load_gemma3_vllm(args: BenchmarkArgs) -> Gemma3vLLM:
-    llmlib_model = Gemma3vLLM_llmlib(
+def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
+    llmlib_model = ModelvLLM(
         model_id=args.model_id,
         max_n_frames_per_video=args.max_n_frames_per_video,
         max_new_tokens=args.output_token_limit,
         gpu_size=args.gpu_size,
+        max_model_len=args.vllm_max_model_len,
     )
-    return Gemma3vLLM(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
+    return ModelvLLM_Benchmark(
+        model_id=args.model_id, args=args, llmlib_model=llmlib_model
+    )
 
 
 def load_qwen(args: BenchmarkArgs) -> Qwen:
@@ -489,7 +494,7 @@ def results_file() -> Path:
 
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
-    assert isinstance(model, Gemma3vLLM), type(model)
+    assert isinstance(model, ModelvLLM_Benchmark), type(model)
     start_time = time.time()
     video_paths = posts_df["video_path"]
     results: list[VideoOutput] = model.process_batch_of_videos(
