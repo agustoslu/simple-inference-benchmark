@@ -23,7 +23,26 @@ python run_benchmark.py --model_id="google/gemma-3-4b-it" --n_examples=300
 Run a test experiment on 24 GB GPU and using vLLM
 
 ```bash
-python run_benchmark.py --use_vllm=True --max_n_frames_per_video=10 --model_id=Qwen/Qwen2.5-VL-3B-Instruct --vllm_max_model_len=16384
+python run_benchmark.py --use_vllm=True --max_n_frames_per_video=10 --model_id=Qwen/Qwen2.5-VL-3B-Instruct --vllm_max_model_len=16384 --n_examples=10
+```
+
+Run a vLLM server:
+
+```bash
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 8192 --max-num-seqs 8 --max-num-batched-tokens 16384 --dtype bfloat16
+```
+
+Then send a request:
+
+```bash
+curl http://localhost:8000/v1/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+        "prompt": "San Francisco is a",
+        "max_tokens": 7,
+        "temperature": 0
+    }'
 ```
 
 Run the experiment in a slurm job

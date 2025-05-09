@@ -4,7 +4,7 @@ from pathlib import Path
 import time
 from datetime import datetime
 import random
-from typing import Literal
+from typing import Literal, Iterable
 from bench_lib.utils import enable_info_logs
 import pandas as pd
 from pydantic import BaseModel
@@ -77,6 +77,8 @@ class VideoOutput:
     response: str
     n_frames_used: int | None
     model_runtime: float | None
+    post_id: str | None = None
+    video_path: str | None = None
 
 
 @dataclass
@@ -89,7 +91,7 @@ class ModelInterface:
 
     def process_batch_of_videos(
         self, video_paths: list[Path], meta_data: list[dict]
-    ) -> list[VideoOutput]:
+    ) -> Iterable[VideoOutput]:
         raise NotImplementedError("Subclasses can implement this method")
 
 
@@ -130,7 +132,7 @@ class ModelvLLM_Benchmark(ModelInterface):
 
     def process_batch_of_videos(
         self, video_paths: list[Path], meta_data: list[dict]
-    ) -> list[VideoOutput]:
+    ) -> Iterable[VideoOutput]:
         assert len(video_paths) == len(meta_data)
 
         convos: list[Conversation] = []
@@ -140,16 +142,20 @@ class ModelvLLM_Benchmark(ModelInterface):
             conversation = [Message(role="user", msg=filled_prompt, video=video_path)]
             convos.append(conversation)
 
-        output = self.llmlib_model.complete_batch(batch=convos, output_dict=True)
-        results = []
-        for idx in range(len(output["response"])):
+        request_ids = [str(i) for i in range(len(video_paths))]
+        reqid_2_post_id = dict(zip(request_ids, [d["video_id"] for d in meta_data]))
+        reqid_2_video_path = dict(zip(request_ids, video_paths))
+
+        gen = self.llmlib_model.complete_batch(batch=convos, output_dict=True)
+        for output_dict in gen:
             vo = VideoOutput(
-                response=output["response"][idx],
-                n_frames_used=output["n_frames"][idx],
-                model_runtime=output["model_runtime"][idx],
+                response=output_dict["response"],
+                n_frames_used=output_dict["n_frames"],
+                model_runtime=output_dict["model_runtime"],
+                post_id=reqid_2_post_id[output_dict["request_id"]],
+                video_path=str(reqid_2_video_path[output_dict["request_id"]]),
             )
-            results.append(vo)
-        return results
+            yield vo
 
 
 @dataclass
@@ -495,26 +501,26 @@ def results_file() -> Path:
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
-    start_time = time.time()
     video_paths = posts_df["video_path"]
-    results: list[VideoOutput] = model.process_batch_of_videos(
+    gen: Iterable[VideoOutput] = model.process_batch_of_videos(
         video_paths=video_paths, meta_data=posts_df.to_dict(orient="records")
     )
-    runtime = time.time() - start_time
-    data = {
-        "Run_ID": generate_run_uuid(),
-        "Timestamp": generate_timestamp(),
-        "Model ID": model.model_id,
-        "Total_Runtime": runtime / len(results),
-        "Model_Runtime": [r.model_runtime for r in results],
-        # "Tokens_Generated": [r.tokens_generated for r in results],
-        "Total_Frames": [r.n_frames_used for r in results],
-        "Processed_Video": [p.name for p in video_paths],
-        "Generations": [r.response for r in results],
-        "video_id": posts_df["video_id"].tolist(),
-    }
-    df = pd.DataFrame(data)
-    save_to_results_files(df)
+    run_id = generate_run_uuid()
+    for video_output in gen:
+        row = {
+            "Run_ID": run_id,
+            "Timestamp": generate_timestamp(),
+            "Model ID": model.model_id,
+            "Total_Runtime": video_output.model_runtime,
+            "Model_Runtime": video_output.model_runtime,
+            # TODO: "Tokens_Generated": [r.tokens_generated for r in results],
+            "Total_Frames": video_output.n_frames_used,
+            "Processed_Video": video_output.video_path,
+            "Generations": video_output.response,
+            "video_id": video_output.post_id,
+        }
+        df = pd.DataFrame([row])
+        save_to_results_files(df)
 
 
 def run_benchmark(args: BenchmarkArgs) -> None:
