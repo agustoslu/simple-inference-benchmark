@@ -322,9 +322,9 @@ def create_tokenizer(model_id):
 
 
 def fill_prompt(meta_data: dict, prompt: str) -> str:
-    slide_desc = meta_data["author_name"]
-    slide_author = meta_data["video_description"]
-    filled = prompt % (slide_desc, slide_author)
+    author = meta_data["author_name"]
+    description = meta_data["video_description"]
+    filled = prompt % (author, description)
     return filled
 
 
