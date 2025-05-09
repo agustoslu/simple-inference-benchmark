@@ -34,7 +34,16 @@ vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --
 
 Run a vLLM batch inference. See this example [documentation](https://github.com/vllm-project/vllm/blob/main/examples/offline_inference/openai/openai_batch.md):
 
+First create a batch file:
+
 ```bash
+python make_vlmm_batch.py --model_id=Qwen/Qwen2.5-VL-3B-Instruct --tgt_jsonl=vllm-batch/tomas/batch_input.jsonl --n_examples=10
+```
+
+Then cd to the directory and run the batch inference:
+
+```bash
+cd vllm-batch/tomas
 python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.jsonl --model Qwen/Qwen2.5-VL-3B-Instruct --allowed-local-media-path=/home/
 ```
 
