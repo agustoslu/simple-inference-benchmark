@@ -29,7 +29,13 @@ python run_benchmark.py --use_vllm=True --max_n_frames_per_video=10 --model_id=Q
 Run a vLLM server:
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 8192 --max-num-seqs 8 --max-num-batched-tokens 16384 --dtype bfloat16
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --max-num-batched-tokens 32768 --dtype bfloat16 --enforce-eager --allowed-local-media-path=/home/
+```
+
+Run a vLLM batch inference. See this example [documentation](https://github.com/vllm-project/vllm/blob/main/examples/offline_inference/openai/openai_batch.md):
+
+```bash
+python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.jsonl --model Qwen/Qwen2.5-VL-3B-Instruct --allowed-local-media-path=/home/
 ```
 
 Then send a request:
