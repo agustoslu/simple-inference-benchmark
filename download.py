@@ -1,4 +1,3 @@
-from functools import cache
 import os
 from pathlib import Path
 
@@ -15,13 +14,6 @@ base_url = "https://huggingface.co/datasets/HuggingFaceFV/finevideo/resolve/main
 template = "train-{i:05d}-of-01357.parquet"
 
 access_token = os.environ["HF_TOKEN"]
-
-
-@cache
-def read_prompt_template() -> str:
-    with open(code_root / "prompt.txt", "r") as f:
-        text: str = f.read()
-    return text
 
 
 def download_finevideo_parquet(i: int) -> None:

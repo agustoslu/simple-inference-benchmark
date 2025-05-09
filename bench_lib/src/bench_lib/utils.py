@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Iterable
 from json_repair import json_repair
 import pandas as pd
 from ast import literal_eval
@@ -6,6 +7,9 @@ import os
 import json
 import re
 import logging
+from llmlib.base_llm import Conversation, Message
+from functools import cache
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,30 @@ def get_posts_df() -> pd.DataFrame:
     )
     desired_cols = ["video_id", "video_path", "author_name", "video_description"]
     return posts_df[desired_cols]
+
+
+@cache
+def read_prompt_template() -> str:
+    with open(Path(__file__).parent / "prompts" / "prompt.txt", "r") as f:
+        text: str = f.read()
+    return text
+
+
+def fill_prompt(row_dict: dict, template: str) -> str:
+    author = row_dict["author_name"]
+    description = row_dict["video_description"]
+    filled = template % (author, description)
+    return filled
+
+
+def to_dataset(posts_df: pd.DataFrame) -> Iterable[Conversation]:
+    for _, row in posts_df.iterrows():
+        row_dict = row.to_dict()
+        template = read_prompt_template()
+        filled_prompt = fill_prompt(row_dict=row_dict, template=template)
+        video_path = row_dict["video_path"]
+        convo = [Message(role="user", msg=filled_prompt, video=video_path)]
+        yield convo
 
 
 def get_labels():

@@ -5,14 +5,19 @@ import time
 from datetime import datetime
 import random
 from typing import Literal, Iterable
-from bench_lib.utils import enable_info_logs
+from bench_lib.utils import (
+    enable_info_logs,
+    fill_prompt,
+    read_prompt_template,
+    to_dataset,
+)
 import pandas as pd
 from pydantic import BaseModel
 import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 import duckdb
-from download import DATASET_PATH, MP4_DATASET_PATH, read_prompt_template, code_root
+from download import DATASET_PATH, MP4_DATASET_PATH, code_root
 from bench_lib.utils import get_posts_df
 from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
@@ -22,7 +27,7 @@ import logging
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local, Message
-from llmlib.vllm_model import ModelvLLM, Conversation
+from llmlib.vllm_model import ModelvLLM
 from llmlib.qwen2_5 import Qwen2_5
 from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
@@ -130,30 +135,21 @@ class Gemma3Hf(HuggingFaceModel):
 class ModelvLLM_Benchmark(ModelInterface):
     llmlib_model: ModelvLLM
 
-    def process_batch_of_videos(
-        self, video_paths: list[Path], meta_data: list[dict]
-    ) -> Iterable[VideoOutput]:
-        assert len(video_paths) == len(meta_data)
+    def process_batch_of_videos(self, posts_df: pd.DataFrame) -> Iterable[VideoOutput]:
+        all_req_ids = [str(i) for i in range(len(posts_df))]
+        posts_df = posts_df.assign(request_id=all_req_ids)
+        posts_df.set_index("request_id", inplace=True)
 
-        convos: list[Conversation] = []
-        for video_path, meta in zip(video_paths, meta_data):
-            prompt_template = read_prompt_template()
-            filled_prompt = fill_prompt(meta_data=meta, prompt=prompt_template)
-            conversation = [Message(role="user", msg=filled_prompt, video=video_path)]
-            convos.append(conversation)
-
-        request_ids = [str(i) for i in range(len(video_paths))]
-        reqid_2_post_id = dict(zip(request_ids, [d["video_id"] for d in meta_data]))
-        reqid_2_video_path = dict(zip(request_ids, video_paths))
-
-        gen = self.llmlib_model.complete_batch(batch=convos, output_dict=True)
+        dataset = to_dataset(posts_df)
+        gen = self.llmlib_model.complete_batch(batch=dataset, output_dict=True)
         for output_dict in gen:
+            req_id = output_dict["request_id"]
             vo = VideoOutput(
                 response=output_dict["response"],
                 n_frames_used=output_dict["n_frames"],
                 model_runtime=output_dict["model_runtime"],
-                post_id=reqid_2_post_id[output_dict["request_id"]],
-                video_path=str(reqid_2_video_path[output_dict["request_id"]]),
+                post_id=posts_df.loc[req_id, "video_id"],
+                video_path=str(posts_df.loc[req_id, "video_path"]),
             )
             yield vo
 
@@ -319,13 +315,6 @@ def load_gemini(args: BenchmarkArgs) -> Gemini:
 
 def create_tokenizer(model_id):
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-
-
-def fill_prompt(meta_data: dict, prompt: str) -> str:
-    author = meta_data["author_name"]
-    description = meta_data["video_description"]
-    filled = prompt % (author, description)
-    return filled
 
 
 class Answer(BaseModel):
@@ -501,10 +490,7 @@ def results_file() -> Path:
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
-    video_paths = posts_df["video_path"]
-    gen: Iterable[VideoOutput] = model.process_batch_of_videos(
-        video_paths=video_paths, meta_data=posts_df.to_dict(orient="records")
-    )
+    gen: Iterable[VideoOutput] = model.process_batch_of_videos(posts_df)
     run_id = generate_run_uuid()
     for video_output in gen:
         row = {
