@@ -88,3 +88,15 @@ This happend because the `transformers` version is too early and does not contai
 ```shell
 pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
 ```
+
+#### RuntimeError: Cannot re-initialize CUDA in forked subprocess
+
+Full error:
+
+```shell
+RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use CUDA with multiprocessing, you must use the 'spawn' start method
+```
+
+Solution: Add this vLLM env var: `VLLM_WORKER_MULTIPROC_METHOD=spawn`
+
+Full description in the [GitHub issue](https://github.com/vllm-project/vllm/issues/8893)
