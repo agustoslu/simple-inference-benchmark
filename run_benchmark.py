@@ -80,8 +80,8 @@ def sample_n_videos(n: int, seed: int):
 @dataclass
 class VideoOutput:
     response: str
-    n_frames_used: int | None
     model_runtime: float | None
+    n_frames_used: int | None = None
     post_id: str | None = None
     video_path: str | None = None
 
@@ -136,20 +136,19 @@ class ModelvLLM_Benchmark(ModelInterface):
     llmlib_model: ModelvLLM
 
     def process_batch_of_videos(self, posts_df: pd.DataFrame) -> Iterable[VideoOutput]:
-        all_req_ids = [str(i) for i in range(len(posts_df))]
-        posts_df = posts_df.assign(request_id=all_req_ids)
-        posts_df.set_index("request_id", inplace=True)
+        all_req_idx = [i for i in range(len(posts_df))]
+        posts_df = posts_df.assign(request_idx=all_req_idx)
+        posts_df.set_index("request_idx", inplace=True)
 
         dataset = to_dataset(posts_df)
-        gen = self.llmlib_model.complete_batch(batch=dataset, output_dict=True)
+        gen = self.llmlib_model.complete_batch(batch=dataset)
         for output_dict in gen:
-            req_id = output_dict["request_id"]
+            req_idx = output_dict["request_idx"]
             vo = VideoOutput(
                 response=output_dict["response"],
-                n_frames_used=output_dict["n_frames"],
                 model_runtime=output_dict["model_runtime"],
-                post_id=posts_df.loc[req_id, "video_id"],
-                video_path=str(posts_df.loc[req_id, "video_path"]),
+                post_id=posts_df.loc[req_idx, "video_id"],
+                video_path=str(posts_df.loc[req_idx, "video_path"]),
             )
             yield vo
 
@@ -259,11 +258,7 @@ def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
 
 def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
     llmlib_model = ModelvLLM(
-        model_id=args.model_id,
-        max_n_frames_per_video=args.max_n_frames_per_video,
-        max_new_tokens=args.output_token_limit,
-        gpu_size=args.gpu_size,
-        max_model_len=args.vllm_max_model_len,
+        model_id=args.model_id, max_new_tokens=args.output_token_limit
     )
     return ModelvLLM_Benchmark(
         model_id=args.model_id, args=args, llmlib_model=llmlib_model
