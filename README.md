@@ -1,19 +1,7 @@
-# simple-inference-benchmark
-Benchmarking different runtimes for vision language models
+# Inference on ToxicAInment Data
 
+Run the inference workload:
 
-| Model                   | Runtime     | QPS@1 | TPS@1 | TPQ@1 | VRAMpeak@1 |
-| ----------------------- | ----------- | ----- | ----- | ----- | ---------- |
-| MiniCPM                 | huggingface | ?     | ?     | ?     | ?          |
-| MiniCPM (model.compile) | huggingface | ?     | ?     | ?     | ?          |
-
-# Run the experiment
-download the dataset
-```bash
-python download.py
-```
-
-Run the experiment
 ```bash
 python run_benchmark.py --model_id="openbmb/MiniCPM-V-2_6" --n_examples=300
 
@@ -26,11 +14,13 @@ Run a test experiment on 24 GB GPU and using vLLM
 python run_benchmark.py --use_vllm=True --max_n_frames_per_video=10 --model_id=Qwen/Qwen2.5-VL-3B-Instruct --vllm_max_model_len=16384 --n_examples=10
 ```
 
-Run a vLLM server:
+Run the experiment in a slurm job
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --max-num-batched-tokens 32768 --dtype bfloat16 --enforce-eager --allowed-local-media-path=/home/
+sbatch enroot_test.sbatch
 ```
+
+## vLLM Batch Inference
 
 Run a vLLM batch inference. See this example [documentation](https://github.com/vllm-project/vllm/blob/main/examples/offline_inference/openai/openai_batch.md):
 
@@ -47,6 +37,14 @@ cd vllm-batch/tomas
 python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.jsonl --model Qwen/Qwen2.5-VL-3B-Instruct --allowed-local-media-path=/home/
 ```
 
+## vLLM Server
+
+Run a vLLM server:
+
+```bash
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --max-num-batched-tokens 32768 --dtype bfloat16 --enforce-eager --allowed-local-media-path=/home/
+```
+
 Then send a request:
 
 ```bash
@@ -60,10 +58,6 @@ curl http://localhost:8000/v1/completions \
     }'
 ```
 
-Run the experiment in a slurm job
-```bash
-sbatch enroot_test.sbatch
-```
 # Install bench_lib
 The `bench_lib` is a package containing utility code and evaluation code. By installing it you can import it everywhere (e.g. within jupyter notebook in `notebooks/`) without worrying about the path of files. 
 ```bash
