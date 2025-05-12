@@ -47,7 +47,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     gpu_size: Literal["24GB", "80GB"] = "24GB"
     restart: bool = False
 
-    vllm_max_model_len: int = 8192
+    vllm_remote_call_concurrency: int = 8
 
 
 # Extract and sample videos
@@ -258,7 +258,9 @@ def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
 
 def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
     llmlib_model = ModelvLLM(
-        model_id=args.model_id, max_new_tokens=args.output_token_limit
+        model_id=args.model_id,
+        max_new_tokens=args.output_token_limit,
+        remote_call_concurrency=args.vllm_remote_call_concurrency,
     )
     return ModelvLLM_Benchmark(
         model_id=args.model_id, args=args, llmlib_model=llmlib_model

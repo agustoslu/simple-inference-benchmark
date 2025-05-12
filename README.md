@@ -42,10 +42,10 @@ python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.json
 Run a vLLM server:
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --max-num-batched-tokens 32768 --dtype bfloat16 --enforce-eager --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2"
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 32768 --max-seq-len-to-capture 32768 --dtype bfloat16 --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2"
 ```
 
-Then send a request:
+Then send a single request:
 
 ```bash
 curl http://localhost:8000/v1/completions \
@@ -56,6 +56,12 @@ curl http://localhost:8000/v1/completions \
         "max_tokens": 7,
         "temperature": 0
     }'
+```
+
+Or run the experiment against the vLLM server:
+
+```bash
+python run_benchmark.py --model_id=Qwen/Qwen2.5-VL-3B-Instruct --use_vllm=True --n_examples=30 --vllm_remote_call_concurrency=8
 ```
 
 # Install bench_lib
