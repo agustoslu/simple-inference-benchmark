@@ -42,7 +42,7 @@ python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.json
 Run a vLLM server:
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --max-num-batched-tokens 32768 --dtype bfloat16 --enforce-eager --allowed-local-media-path=/home/
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 24576 --max-num-seqs 8 --max-num-batched-tokens 32768 --dtype bfloat16 --enforce-eager --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2"
 ```
 
 Then send a request:
