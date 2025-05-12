@@ -120,7 +120,7 @@ class Gemma3Hf(HuggingFaceModel):
 
     def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
 
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
@@ -160,7 +160,7 @@ class Qwen(HuggingFaceModel):
 
     def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
         return VideoOutput(
@@ -176,7 +176,7 @@ class Llama(HuggingFaceModel):
 
     def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
         return VideoOutput(
@@ -192,7 +192,7 @@ class Gemini(ModelInterface):
 
     def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
         prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(meta_data=meta_data, prompt=prompt_template)
+        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         response = self.llmlib_model.video_prompt(
             video=video_path, prompt=filled_prompt
         )
