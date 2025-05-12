@@ -10,7 +10,7 @@
 Pillow
 torch
 torchvision
-transformers==4.47.1 # otherwise we get valueError related to broadcasting / in the library they have changed iterable to sequence in 4.49.1
+transformers
 sentencepiece
 duckdb
 accelerate
@@ -44,3 +44,5 @@ pydantic-settings
 
 # parsing LLM output
 json_repair
+
+vllm
