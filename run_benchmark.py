@@ -48,6 +48,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     restart: bool = False
 
     vllm_remote_call_concurrency: int = 8
+    vllm_port: int = 8000
 
 
 # Extract and sample videos
@@ -270,6 +271,7 @@ def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
         model_id=args.model_id,
         max_new_tokens=args.output_token_limit,
         remote_call_concurrency=args.vllm_remote_call_concurrency,
+        port=args.vllm_port,
     )
     return ModelvLLM_Benchmark(
         model_id=args.model_id, args=args, llmlib_model=llmlib_model
