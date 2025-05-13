@@ -144,10 +144,19 @@ class ModelvLLM_Benchmark(ModelInterface):
         gen = self.llmlib_model.complete_batch(batch=dataset)
         for output_dict in gen:
             req_idx = output_dict["request_idx"]
+            post_id = posts_df.loc[req_idx, "video_id"]
+            if not output_dict["success"]:
+                logger.info(
+                    "Error processing post_id'=%s'. Error: %s",
+                    post_id,
+                    repr(output_dict["error"]),
+                )
+                continue
+
             vo = VideoOutput(
                 response=output_dict["response"],
                 model_runtime=output_dict["model_runtime"],
-                post_id=posts_df.loc[req_idx, "video_id"],
+                post_id=post_id,
                 video_path=str(posts_df.loc[req_idx, "video_path"]),
             )
             yield vo

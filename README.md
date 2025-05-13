@@ -61,7 +61,7 @@ curl http://localhost:8000/v1/completions \
 Or run the experiment against the vLLM server:
 
 ```bash
-python run_benchmark.py --model_id=Qwen/Qwen2.5-VL-3B-Instruct --use_vllm=True --n_examples=30 --vllm_remote_call_concurrency=8
+python run_benchmark.py --model_id=Qwen/Qwen2.5-VL-3B-Instruct --use_vllm=True --n_examples=10 --vllm_remote_call_concurrency=8
 ```
 
 # Install bench_lib
