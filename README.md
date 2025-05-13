@@ -42,7 +42,7 @@ python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.json
 Run a vLLM server on the CSS cluster:
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 32768 --max-seq-len-to-capture 32768 --dtype bfloat16 --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2"
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 32768 --max-seq-len-to-capture 32768 --dtype bfloat16 --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2" --disable-log-requests
 ```
 
 Or on the LRZ AI Systems:
@@ -68,6 +68,15 @@ Or run the experiment against the vLLM server:
 
 ```bash
 python run_benchmark.py --model_id=Qwen/Qwen2.5-VL-3B-Instruct --use_vllm=True --n_examples=10 --vllm_remote_call_concurrency=8
+```
+
+### Profiling the vLLM server
+
+Prepend the `nsys` command below to the `vllm serve` command. Then run the workload as normal. 
+The output file `report.nsys-rep` can be opened with `nsight-sys` to get a detailed breakdown of the runtime.
+
+```bash
+nsys profile -o report.nsys-rep --trace-fork-before-exec=true --cuda-graph-trace=node --delay 120 --duration 45 --python-sampling
 ```
 
 # Install bench_lib
