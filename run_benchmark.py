@@ -512,6 +512,7 @@ def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
             "Processed_Video": video_output.video_path,
             "Generations": video_output.response,
             "video_id": video_output.post_id,
+            "vllm_concurrency": args.vllm_remote_call_concurrency,
         }
         df = pd.DataFrame([row])
         save_to_results_files(df)
