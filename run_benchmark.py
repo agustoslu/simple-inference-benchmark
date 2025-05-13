@@ -147,8 +147,8 @@ class ModelvLLM_Benchmark(ModelInterface):
             req_idx = output_dict["request_idx"]
             post_id = posts_df.loc[req_idx, "video_id"]
             if not output_dict["success"]:
-                logger.info(
-                    "Error processing post_id'=%s'. Error: %s",
+                logger.error(
+                    "Error processing post_id '%s'. Cause: %s",
                     post_id,
                     repr(output_dict["error"]),
                 )
