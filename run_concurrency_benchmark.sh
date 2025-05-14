@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Array of concurrency values to test
-concurrency_values=(32 16 8 4 2 1)
+concurrency_values=(32 24 16 12 8 4 2 1)
 
 # Loop through each concurrency value
 for concurrency in "${concurrency_values[@]}"; do
@@ -9,7 +9,7 @@ for concurrency in "${concurrency_values[@]}"; do
     
     # Run the benchmark with the current concurrency value
     python run_benchmark.py \
-        --model_id=Qwen/Qwen2.5-VL-7B-Instruct \
+        --model_id=Qwen/Qwen2.5-VL-3B-Instruct \
         --use_vllm=True \
         --n_examples=100 \
         --vllm_remote_call_concurrency=$concurrency
