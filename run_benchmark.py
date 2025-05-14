@@ -141,8 +141,10 @@ class ModelvLLM_Benchmark(ModelInterface):
         posts_df.set_index("request_idx", inplace=True)
 
         dataset = to_dataset(posts_df)
+        start = time.time()
         gen = self.llmlib_model.complete_batch(batch=dataset)
         for output_dict in gen:
+            now = time.time()
             req_idx = output_dict["request_idx"]
             post_id = posts_df.loc[req_idx, "video_id"]
             if not output_dict["success"]:
@@ -155,11 +157,12 @@ class ModelvLLM_Benchmark(ModelInterface):
 
             vo = VideoOutput(
                 response=output_dict["response"],
-                model_runtime=output_dict["model_runtime"],
+                model_runtime=now - start,
                 post_id=post_id,
                 video_path=str(posts_df.loc[req_idx, "video_path"]),
             )
             yield vo
+            start = now
 
 
 @dataclass
