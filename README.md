@@ -42,14 +42,14 @@ python -m vllm.entrypoints.openai.run_batch -i batch_input.jsonl -o results.json
 Run a vLLM server on the CSS cluster:
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 32768 --max-seq-len-to-capture 32768 --dtype bfloat16 --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2" --disable-log-requests
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct --task generate --max-model-len 32768 --max-seq-len-to-capture 32768 --dtype bfloat16 --allowed-local-media-path=/home/ --limit-mm-per-prompt "image=50,video=2" --disable-log-requests --port 8000
 ```
 
 Or on the LRZ AI Systems:
 
 ```bash
-vllm serve Qwen/Qwen2.5-VL-3B-Instruct --max-model-len 128000 --max-seq-len-to-capture 128000 --dtype bfloat16 --allowed-local-media-path=/dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/ --limit-mm-per-prompt "image=100,video=2" --disable-log-requests
-````
+vllm serve Qwen/Qwen2.5-VL-7B-Instruct --task generate --max-model-len 128000 --max-seq-len-to-capture 128000 --dtype bfloat16 --allowed-local-media-path=/dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/ --limit-mm-per-prompt "image=100,video=2" --disable-log-requests --port 8000
+```
 
 Then send a single request:
 
