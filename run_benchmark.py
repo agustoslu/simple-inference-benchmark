@@ -44,7 +44,6 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     max_n_frames_per_video: int = 50
     output_token_limit: int = 512
     compile: bool = False
-    gpu_size: Literal["24GB", "80GB"] = "24GB"
     restart: bool = False
 
     vllm_remote_call_concurrency: int = 8
