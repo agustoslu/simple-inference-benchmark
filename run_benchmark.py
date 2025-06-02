@@ -83,7 +83,8 @@ class VideoOutput:
     model_runtime: float | None
     n_frames_used: int | None = None
     post_id: str | None = None
-    video_path: str | None = None
+    video_path: str | list[str] | None = None
+
 
 
 @dataclass
@@ -179,6 +180,19 @@ class Qwen(HuggingFaceModel):
             n_frames_used=output["n_frames"],
             model_runtime=output["model_runtime"],
         )
+
+    def process_slides(self, slide_paths: list[str | Path], meta_data:dict) -> VideoOutput:
+        """Process slides using the Qwen model."""
+        prompt_template = read_prompt_template()
+        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
+        messages = [Message(role="user", msg=filled_prompt, images=slide_paths)]
+        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+        return VideoOutput(
+            response=output["response"],
+            n_frames_used=output["n_frames"],  
+            model_runtime=output["model_runtime"],
+        )
+    
 
 
 @dataclass
