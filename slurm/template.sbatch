@@ -28,6 +28,7 @@ enroot start --rw --root \
     --env DSS_HOME=$DSS_HOME \
     --env HF_TOKEN=$HF_TOKEN \
     --env HF_HOME=$HF_HOME \
+    --env BUGSNAG_API_KEY=$BUGSNAG_API_KEY \
     $CONTAINER_NAME bash -c "source /root/ptvenv/bin/activate && python /workspace/code/simple-inference-benchmark/run_benchmark.py \
     --model_id={MODEL_ID} \
     --n_examples=300 \
