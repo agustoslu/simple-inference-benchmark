@@ -8,6 +8,7 @@ import json
 import re
 import logging
 from llmlib.base_llm import Conversation, Message
+from llmlib.huggingface_inference import is_video
 from functools import cache
 
 
@@ -27,13 +28,13 @@ def get_posts_df() -> pd.DataFrame:
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )
     posts_df = posts_df.assign(
-        is_video=posts_df["filenames"].apply(lambda x: x[0].endswith(".mp4"))
+        is_video=posts_df["filenames"].apply(lambda x: is_video(x[0]))
     )
     logger.info(
-        "Dropping %d non-video posts out of %d. Keeping %d posts.",
-        len(posts_df.query("~is_video")),
+        "Num Posts: %d. Of those, %d are videos and %d are slides.",
         len(posts_df),
         len(posts_df.query("is_video")),
+        len(posts_df.query("~is_video")),
     )
     posts_df = posts_df.query("is_video")
     posts_df = posts_df.assign(
@@ -274,6 +275,6 @@ class Cols:
 def enable_info_logs() -> None:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
