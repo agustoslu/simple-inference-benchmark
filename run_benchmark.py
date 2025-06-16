@@ -416,10 +416,6 @@ def save_to_results_files(df: pd.DataFrame, tgt_file: Path) -> None:
     logger.info("added line to %s", tgt_file)
 
 
-def results_file() -> Path:
-    return Path(__file__).parent / "toxicainment_videos_log.jsonl"
-
-
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame, tgt_file: str):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
     run_id = generate_run_uuid()
@@ -441,12 +437,14 @@ def run_benchmark(args: BenchmarkArgs) -> None:
     posts_df = get_posts_df()
     posts_df = posts_df.head(args.n_examples)
     if args.restart:
-        posts_df = discard_posts_already_processed(posts_df)
+        posts_df = discard_posts_already_processed(posts_df, args.tgt_file)
     benchmark_videos(args, posts_df)
 
 
-def discard_posts_already_processed(posts_df: pd.DataFrame) -> pd.DataFrame:
-    results_df = read_results_file()
+def discard_posts_already_processed(
+    posts_df: pd.DataFrame, tgt_file: Path | str
+) -> pd.DataFrame:
+    results_df = read_results_file(file=tgt_file)
     success = results_df.query("success")
     logger.info("Already processed %d posts", success["video_id"].nunique())
     posts_df = posts_df[~posts_df["video_id"].isin(success["video_id"])]
@@ -454,8 +452,8 @@ def discard_posts_already_processed(posts_df: pd.DataFrame) -> pd.DataFrame:
     return posts_df
 
 
-def read_results_file() -> pd.DataFrame:
-    file: Path = results_file()
+def read_results_file(file: Path | str) -> pd.DataFrame:
+    file = Path(file)
     if not file.exists():
         raise FileNotFoundError(file.absolute())
     return pd.read_json(file, orient="records", lines=True, dtype={"video_id": "str"})
