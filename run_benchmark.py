@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 import time
 from datetime import datetime
-import random
 from typing import Literal, Iterable
 from bench_lib.utils import (
     enable_info_logs,
@@ -16,8 +15,6 @@ from pydantic import BaseModel
 import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
-import duckdb
-from download import DATASET_PATH, MP4_DATASET_PATH, code_root
 from bench_lib.utils import get_posts_df
 from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
@@ -48,32 +45,6 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
 
     vllm_remote_call_concurrency: int = 8
     vllm_port: int = 8000
-
-
-# Extract and sample videos
-def sample_n_videos(n: int, seed: int):
-    con = duckdb.connect()
-    n_videos = con.sql(f"SELECT COUNT(*) FROM '{DATASET_PATH}/*.parquet'").fetchone()[0]  # type: ignore
-    logger.info("Total videos: %d", n_videos)
-    random.seed(seed)
-    random_ids = random.sample(range(n_videos), n)
-    logger.info("Randomly selected video IDs: %s", random_ids)
-    df = con.sql(f"""
-                 SELECT id, mp4
-                 FROM (SELECT mp4, ROW_NUMBER() OVER () AS id FROM '{DATASET_PATH}/*.parquet')
-                 WHERE id IN ({", ".join([str(id) for id in random_ids])})
-                 """).fetch_arrow_table()
-
-    video_paths = []
-    for idx, row in zip(df["id"], df["mp4"]):
-        mp4_video_path = os.path.join(MP4_DATASET_PATH, f"video_{idx}.mp4")
-        if not Path(mp4_video_path).exists():
-            with open(mp4_video_path, "wb") as f:
-                f.write(row.as_py())
-            logger.info("Saved video to %s", mp4_video_path)
-        video_paths.append(mp4_video_path)
-
-    return video_paths
 
 
 # TODO: Move to llmlib
@@ -217,13 +188,10 @@ class Gemini(ModelInterface):
 def load_model(args: BenchmarkArgs) -> ModelInterface:
     """Loads model from huggingface"""
     model_id = args.model_id
-    logger.info("Initializing model '%s'...", model_id)
-
-    # if model_id == minicpm_omni.model_id:
-    #     return minicpm_omni.load_model()
-
     if args.use_vllm:
         return load_vllm_model(args)
+
+    logger.info("Initializing model '%s'...", model_id)
 
     if "gemma-3" in model_id:
         return load_gemma3_huggingface(args)
@@ -269,6 +237,7 @@ def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
 
 
 def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
+    logger.info("Using vLLM model '%s'...", args.model_id)
     llmlib_model = ModelvLLM(
         model_id=args.model_id,
         max_new_tokens=args.output_token_limit,
@@ -495,7 +464,7 @@ def save_to_results_files(df: pd.DataFrame) -> None:
 
 
 def results_file() -> Path:
-    return code_root / "toxicainment_videos_log.jsonl"
+    return Path(__file__).parent / "toxicainment_videos_log.jsonl"
 
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
