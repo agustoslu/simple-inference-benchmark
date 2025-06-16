@@ -35,6 +35,7 @@ enroot start --rw --root \
     --vllm_remote_call_concurrency=64 \
     --vllm_start_server=True \
     --vllm_port $VLLM_PORT \
+    --vllm_allowed_local_media_path /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/ \
     --tgt_file /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/di38bec/{JOB_NAME}/all-responses.jsonl"
 
 # Clean up: remove the container after job completion

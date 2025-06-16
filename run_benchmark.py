@@ -51,6 +51,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     vllm_start_server: bool = False
     vllm_port: int = 8000
     vllm_remote_call_concurrency: int = 8
+    vllm_allowed_local_media_path: str = "/home/"
 
 
 # TODO: Move to llmlib
@@ -475,27 +476,27 @@ def profiler_context(no_op: bool = False) -> Generator[None, None, None]:
         )
 
 
-def vllm_command(model_id: str, port: int) -> list[str]:
+def vllm_command(args: BenchmarkArgs) -> list[str]:
     return [
         "vllm",
         "serve",
-        model_id,
+        args.model_id,
         "--max-model-len=32768",
         "--max-seq-len-to-capture=32768",
         "--dtype=auto",
-        "--allowed-local-media-path=/home/",
+        f"--allowed-local-media-path={args.vllm_allowed_local_media_path}",
         "--limit-mm-per-prompt=image=50,video=1",
         "--disable-log-requests",
-        f"--port={port}",
+        f"--port={args.vllm_port}",
         "--host=127.0.0.1",
         "--disable-uvicorn-access-log",
-        "--gpu-memory-utilization=0.8",  # TODO: set to 0.95
+        "--gpu-memory-utilization=0.95",
     ]
 
 
 @contextmanager
 def using_vllm_server(args: BenchmarkArgs) -> Generator[None, None, None]:
-    cmd = vllm_command(args.model_id, args.vllm_port)
+    cmd: list[str] = vllm_command(args)
     with spinup_vllm_server(no_op=not args.vllm_start_server, vllm_command=cmd):
         yield
 
