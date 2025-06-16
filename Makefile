@@ -7,7 +7,8 @@ run-benchmark:
 		--n_examples 30 \
 		--use_vllm True \
 		--vllm_remote_call_concurrency 8 \
-		--restart False
+		--restart False \
+		--vllm_start_server False
 
 
 vllm-server:

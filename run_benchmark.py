@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import time
 from datetime import datetime
-from typing import Literal, Iterable
+from typing import Literal, Iterable, Generator
 from bench_lib.utils import (
     enable_info_logs,
     fill_prompt,
@@ -21,6 +21,7 @@ from pydantic_settings import BaseSettings
 from pyinstrument import Profiler
 import uuid
 import logging
+from contextlib import contextmanager
 
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
@@ -30,6 +31,7 @@ from llmlib.qwen2_5 import Qwen2_5
 from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
 from llmlib.base_llm import Message, LlmReq
+from llmlib.vllmserver import spinup_vllm_server
 
 
 logger = logging.getLogger(__name__)
@@ -46,8 +48,9 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     restart: bool = False
     tgt_file: Path = "responses.jsonl"
 
-    vllm_remote_call_concurrency: int = 8
+    vllm_start_server: bool = False
     vllm_port: int = 8000
+    vllm_remote_call_concurrency: int = 8
 
 
 # TODO: Move to llmlib
@@ -455,17 +458,51 @@ def read_results_file() -> pd.DataFrame:
     return pd.read_json(file, orient="records", lines=True, dtype={"video_id": "str"})
 
 
-if __name__ == "__main__":
-    enable_info_logs()
-    args = BenchmarkArgs()
-    logger.info("%s", args)
-    if args.profile:
-        profiler = Profiler(interval=0.01)
+@contextmanager
+def profiler_context(no_op: bool = False) -> Generator[None, None, None]:
+    if no_op:
+        yield
+        return
+
+    profiler = Profiler(interval=0.01)
+    try:
         with profiler:
-            run_benchmark(args)
+            yield
+    finally:
         os.makedirs("profiles", exist_ok=True)
         profiler.write_html(
             f"profiles/profile_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
         )
-    else:
+
+
+def vllm_command(model_id: str, port: int) -> list[str]:
+    return [
+        "vllm",
+        "serve",
+        model_id,
+        "--max-model-len=32768",
+        "--max-seq-len-to-capture=32768",
+        "--dtype=auto",
+        "--allowed-local-media-path=/home/",
+        "--limit-mm-per-prompt=image=50,video=1",
+        "--disable-log-requests",
+        f"--port={port}",
+        "--host=127.0.0.1",
+        "--disable-uvicorn-access-log",
+        "--gpu-memory-utilization=0.8",  # TODO: set to 0.95
+    ]
+
+
+@contextmanager
+def using_vllm_server(args: BenchmarkArgs) -> Generator[None, None, None]:
+    cmd = vllm_command(args.model_id, args.vllm_port)
+    with spinup_vllm_server(no_op=not args.vllm_start_server, vllm_command=cmd):
+        yield
+
+
+if __name__ == "__main__":
+    enable_info_logs()
+    args = BenchmarkArgs()
+    logger.info("%s", args)
+    with profiler_context(no_op=not args.profile), using_vllm_server(args):
         run_benchmark(args)
