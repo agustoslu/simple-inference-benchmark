@@ -6,6 +6,7 @@ dataset
 *.jsonl
 *.jsonl.bak
 *.code-workspace
+slurm/slurm_scripts/
 
 profiles/
 backup/

@@ -44,6 +44,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     output_token_limit: int = 512
     compile: bool = False
     restart: bool = False
+    tgt_file: Path = "responses.jsonl"
 
     vllm_remote_call_concurrency: int = 8
     vllm_port: int = 8000
@@ -300,14 +301,18 @@ def process_video_minicpm(
 def benchmark_videos(args: BenchmarkArgs, posts_df: pd.DataFrame):
     model = load_model(args)
     if args.use_vllm:
-        batch_process_dataset(model=model, posts_df=posts_df)
+        batch_process_dataset(model=model, posts_df=posts_df, tgt_file=args.tgt_file)
     elif isinstance(model, HuggingFaceModel):
-        process_dataset_by_row(model=model, posts_df=posts_df)
+        process_dataset_by_row(model=model, posts_df=posts_df, tgt_file=args.tgt_file)
     else:  # Remote models like Gemini
-        process_dataset_by_row_remotely(model=model, posts_df=posts_df)
+        process_dataset_by_row_remotely(
+            model=model, posts_df=posts_df, tgt_file=args.tgt_file
+        )
 
 
-def process_dataset_by_row_remotely(model: ModelInterface, posts_df: pd.DataFrame):
+def process_dataset_by_row_remotely(
+    model: ModelInterface, posts_df: pd.DataFrame, tgt_file: Path
+):
     this_run = generate_run_uuid()
 
     for _, row in tqdm(list(posts_df.iterrows()), desc="Benchmarking model"):
@@ -333,10 +338,12 @@ def process_dataset_by_row_remotely(model: ModelInterface, posts_df: pd.DataFram
         }
 
         df = pd.DataFrame([row])
-        save_to_results_files(df)
+        save_to_results_files(df, tgt_file)
 
 
-def process_dataset_by_row(model: HuggingFaceModel, posts_df: pd.DataFrame):
+def process_dataset_by_row(
+    model: HuggingFaceModel, posts_df: pd.DataFrame, tgt_file: Path
+):
     this_run = generate_run_uuid()
 
     for _, row in tqdm(list(posts_df.iterrows()), desc="Benchmarking model"):
@@ -384,7 +391,7 @@ def process_dataset_by_row(model: HuggingFaceModel, posts_df: pd.DataFrame):
         }
 
         df = pd.DataFrame([row])
-        save_to_results_files(df)
+        save_to_results_files(df, tgt_file)
         torch.cuda.reset_peak_memory_stats()
 
 
@@ -398,23 +405,23 @@ def generate_run_uuid() -> str:
     return uid
 
 
-def save_to_results_files(df: pd.DataFrame) -> None:
-    df.to_json(results_file(), orient="records", lines=True, mode="a")
-    logger.info("added line to %s", results_file())
+def save_to_results_files(df: pd.DataFrame, tgt_file: Path) -> None:
+    df.to_json(tgt_file, orient="records", lines=True, mode="a")
+    logger.info("added line to %s", tgt_file)
 
 
 def results_file() -> Path:
     return Path(__file__).parent / "toxicainment_videos_log.jsonl"
 
 
-def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
+def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame, tgt_file: str):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
     run_id = generate_run_uuid()
     reqs: Iterable[LlmReq] = list(to_iterof_llmreqs(posts_df))
     gen = model.llmlib_model.complete_batchof_reqs(batch=reqs)
     for response in tqdm(gen, desc="Processing dataset", total=len(posts_df)):
         data = response | {"run_id": run_id, "timestamp": generate_timestamp()}
-        append_to_jsonl(results_file(), data)
+        append_to_jsonl(tgt_file, data)
 
 
 def append_to_jsonl(path: Path, row: dict) -> None:
