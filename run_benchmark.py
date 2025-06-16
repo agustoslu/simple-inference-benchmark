@@ -52,6 +52,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     vllm_port: int = 8000
     vllm_remote_call_concurrency: int = 8
     vllm_allowed_local_media_path: str = "/home/"
+    vllm_tensor_parallel_size: int = 1
 
 
 # TODO: Move to llmlib
@@ -492,6 +493,7 @@ def vllm_command(args: BenchmarkArgs) -> list[str]:
         "--host=127.0.0.1",
         "--disable-uvicorn-access-log",
         "--gpu-memory-utilization=0.95",
+        f"--tensor-parallel-size={args.vllm_tensor_parallel_size}",
     ]
 
 

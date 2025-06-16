@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition lrz-hgx-h100-94x4,lrz-dgx-a100-80x8,lrz-hgx-a100-80x4
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:{N_GPUS}
 #SBATCH --array=0
 #SBATCH -o /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/%u/%x/%a/stdout.txt
 #SBATCH -e /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/%u/%x/%a/stderr.txt
@@ -32,10 +32,11 @@ enroot start --rw --root \
     --model_id={MODEL_ID} \
     --n_examples=300 \
     --use_vllm=True \
-    --vllm_remote_call_concurrency=64 \
+    --vllm_remote_call_concurrency=32 \
     --vllm_start_server=True \
     --vllm_port $VLLM_PORT \
     --vllm_allowed_local_media_path /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/ \
+    --vllm_tensor_parallel_size {N_GPUS} \
     --tgt_file /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/di38bec/{JOB_NAME}/all-responses.jsonl"
 
 # Clean up: remove the container after job completion

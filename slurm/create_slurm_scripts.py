@@ -1,14 +1,20 @@
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import argparse
 
-MODELS = [
-    "Qwen/Qwen2.5-VL-3B-Instruct",
-    "Qwen/Qwen2.5-VL-7B-Instruct",
-    "Qwen/Qwen2.5-VL-14B-Instruct",
-    "Qwen/Qwen2.5-VL-32B-Instruct",
-    "Qwen/Qwen2.5-VL-72B-Instruct",
+@dataclass
+class Case:
+    model: str
+    n_gpus: int
+
+CASES = [
+    Case(model="Qwen/Qwen2.5-VL-3B-Instruct", n_gpus=1),
+    Case(model="Qwen/Qwen2.5-VL-7B-Instruct", n_gpus=1),
+    Case(model="Qwen/Qwen2.5-VL-32B-Instruct", n_gpus=2),
+    Case(model="Qwen/Qwen2.5-VL-72B-Instruct", n_gpus=4),
 ]
+
 BASE_PORT = 9000
 
 
@@ -26,13 +32,14 @@ for file in tgt_dir.glob("*.sbatch"):
     file.unlink()
 
 template: str = Path("template.sbatch").read_text()
-for i, model in enumerate(MODELS):
+for i, case in enumerate(CASES):
     port = BASE_PORT + (i * 100)  # Give enough space between job ports
-    jobname = f"{i}_{model.replace('/', '_')}"
+    jobname = f"{i}_{case.model.replace('/', '_')}"
     filled = template.format(
         JOB_NAME=jobname,
-        MODEL_ID=model,
+        MODEL_ID=case.model,
         VLLM_PORT=port,
+        N_GPUS=case.n_gpus,
     )
 
     script_path = tgt_dir / f"{jobname}.sbatch"
