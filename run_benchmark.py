@@ -197,6 +197,7 @@ def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
         max_new_tokens=args.output_token_limit,
         remote_call_concurrency=args.vllm_remote_call_concurrency,
         port=args.vllm_port,
+        timeout_secs=300,
     )
     return ModelvLLM_Benchmark(
         model_id=args.model_id, args=args, llmlib_model=llmlib_model
