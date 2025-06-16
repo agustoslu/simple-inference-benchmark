@@ -49,7 +49,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
 
 # TODO: Move to llmlib
 @dataclass
-class VideoOutput:
+class Output:
     response: str
     post_id: str | None = None
 
@@ -59,15 +59,15 @@ class ModelInterface:
     model_id: str
     args: BenchmarkArgs
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         raise NotImplementedError("Subclasses can implement this method")
 
     def process_batch_of_videos(
         self, video_paths: list[Path], meta_data: list[dict]
-    ) -> Iterable[VideoOutput]:
+    ) -> Iterable[Output]:
         raise NotImplementedError("Subclasses can implement this method")
 
-    def process_batch_of_posts(self, posts_df: pd.DataFrame) -> Iterable[VideoOutput]:
+    def process_batch_of_posts(self, posts_df: pd.DataFrame) -> Iterable[Output]:
         raise NotImplementedError("Subclasses can implement this method")
 
 
@@ -79,7 +79,7 @@ class HuggingFaceModel(ModelInterface):
 
 @dataclass
 class MiniCPM(HuggingFaceModel):
-    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         return process_video_minicpm(
             video_path=video_path, args=self.args, hf=self, meta_data=meta_data
         )
@@ -89,20 +89,20 @@ class MiniCPM(HuggingFaceModel):
 class Gemma3Hf(HuggingFaceModel):
     llmlib_model: Gemma3Local
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
 
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
-        return VideoOutput(response=output["response"])
+        return Output(response=output["response"])
 
 
 @dataclass
 class ModelvLLM_Benchmark(ModelInterface):
     llmlib_model: ModelvLLM
 
-    def process_batch_of_videos(self, posts_df: pd.DataFrame) -> Iterable[VideoOutput]:
+    def process_batch_of_videos(self, posts_df: pd.DataFrame) -> Iterable[Output]:
         all_req_idx = [i for i in range(len(posts_df))]
         posts_df = posts_df.assign(request_idx=all_req_idx)
         posts_df.set_index("request_idx", inplace=True)
@@ -120,7 +120,7 @@ class ModelvLLM_Benchmark(ModelInterface):
                 )
                 continue
 
-            vo = VideoOutput(response=output_dict["response"], post_id=post_id)
+            vo = Output(response=output_dict["response"], post_id=post_id)
             yield vo
 
 
@@ -128,37 +128,37 @@ class ModelvLLM_Benchmark(ModelInterface):
 class Qwen(HuggingFaceModel):
     llmlib_model: Qwen2_5
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
-        return VideoOutput(response=output["response"])
+        return Output(response=output["response"])
 
 
 @dataclass
 class Llama(HuggingFaceModel):
     llmlib_model: Llama_4
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
-        return VideoOutput(response=output["response"])
+        return Output(response=output["response"])
 
 
 @dataclass
 class Gemini(ModelInterface):
     llmlib_model: GeminiAPI
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> VideoOutput:
+    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         prompt_template = read_prompt_template()
         filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         response = self.llmlib_model.video_prompt(
             video=video_path, prompt=filled_prompt
         )
-        return VideoOutput(response=response)
+        return Output(response=response)
 
 
 def load_model(args: BenchmarkArgs) -> ModelInterface:
@@ -284,7 +284,7 @@ class SaxonyDeletedContentSchema(BaseModel):
 
 def process_video_minicpm(
     video_path: str | Path, args: BenchmarkArgs, hf: HuggingFaceModel, meta_data: dict
-) -> VideoOutput:
+) -> Output:
     model, tokenizer = hf.model, hf.tokenizer
 
     ## TODO:
@@ -321,7 +321,7 @@ def process_video_minicpm(
     except Exception as e:
         raise ValueError(f"Error generating for video: {e}") from e
 
-    return VideoOutput(response=res)
+    return Output(response=res)
 
 
 def benchmark_videos(args: BenchmarkArgs, posts_df: pd.DataFrame):
@@ -436,7 +436,7 @@ def results_file() -> Path:
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
-    gen: Iterable[VideoOutput] = model.process_batch_of_videos(posts_df)
+    gen: Iterable[Output] = model.process_batch_of_videos(posts_df)
     run_id = generate_run_uuid()
     for video_output in gen:
         row = {
