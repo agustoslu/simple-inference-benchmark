@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
-
-from pydantic_settings import BaseSettings
-
+import argparse
 
 MODELS = [
     "Qwen/Qwen2.5-VL-3B-Instruct",
@@ -14,11 +12,10 @@ MODELS = [
 BASE_PORT = 9000
 
 
-class Args(BaseSettings, cli_parse_args=True):
-    launch: bool = False
-
-
-args = Args()
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--launch", action="store_true")
+    return parser.parse_args()
 
 
 tgt_dir = Path("slurm_scripts")
@@ -43,6 +40,7 @@ for i, model in enumerate(MODELS):
     os.chmod(script_path, 0o755)
     print(f"Created sbatch file: '{script_path}'")
 
+    args = parse_args()
     if args.launch:
         os.system(f"sbatch {script_path}")
         print(f"Launched array job: '{script_path}'")
