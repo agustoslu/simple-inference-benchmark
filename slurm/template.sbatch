@@ -5,7 +5,7 @@
 #SBATCH -o /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/%u/%x/%a/stdout.txt
 #SBATCH -e /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/%u/%x/%a/stderr.txt
 #SBATCH --job-name {JOB_NAME}
-#SBATCH --time 5:00:00
+#SBATCH --time 3:00:00
 
 # Set container name based on job name and array task ID to avoid conflicts
 CONTAINER_NAME="toxicainment_{JOB_NAME}_${{SLURM_ARRAY_TASK_ID}}"
@@ -31,6 +31,7 @@ enroot start --rw --root \
     --env BUGSNAG_API_KEY=$BUGSNAG_API_KEY \
     $CONTAINER_NAME bash -c "source /root/ptvenv/bin/activate && python /workspace/code/simple-inference-benchmark/run_benchmark.py \
     --model_id={MODEL_ID} \
+    --restart=True \
     --n_examples=300 \
     --use_vllm=True \
     --vllm_remote_call_concurrency=32 \
