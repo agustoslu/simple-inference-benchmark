@@ -51,10 +51,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
 @dataclass
 class VideoOutput:
     response: str
-    model_runtime: float | None
-    n_frames_used: int | None = None
     post_id: str | None = None
-    video_path: str | None = None
 
 
 @dataclass
@@ -68,6 +65,9 @@ class ModelInterface:
     def process_batch_of_videos(
         self, video_paths: list[Path], meta_data: list[dict]
     ) -> Iterable[VideoOutput]:
+        raise NotImplementedError("Subclasses can implement this method")
+
+    def process_batch_of_posts(self, posts_df: pd.DataFrame) -> Iterable[VideoOutput]:
         raise NotImplementedError("Subclasses can implement this method")
 
 
@@ -95,11 +95,7 @@ class Gemma3Hf(HuggingFaceModel):
 
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
-        return VideoOutput(
-            response=output["response"],
-            n_frames_used=output["n_frames"],
-            model_runtime=output["model_runtime"],
-        )
+        return VideoOutput(response=output["response"])
 
 
 @dataclass
@@ -112,10 +108,8 @@ class ModelvLLM_Benchmark(ModelInterface):
         posts_df.set_index("request_idx", inplace=True)
 
         dataset = to_dataset(posts_df)
-        start = time.time()
         gen = self.llmlib_model.complete_batch(batch=dataset)
         for output_dict in gen:
-            now = time.time()
             req_idx = output_dict["request_idx"]
             post_id = posts_df.loc[req_idx, "video_id"]
             if not output_dict["success"]:
@@ -126,14 +120,8 @@ class ModelvLLM_Benchmark(ModelInterface):
                 )
                 continue
 
-            vo = VideoOutput(
-                response=output_dict["response"],
-                model_runtime=now - start,
-                post_id=post_id,
-                video_path=str(posts_df.loc[req_idx, "video_path"]),
-            )
+            vo = VideoOutput(response=output_dict["response"], post_id=post_id)
             yield vo
-            start = now
 
 
 @dataclass
@@ -145,11 +133,7 @@ class Qwen(HuggingFaceModel):
         filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
-        return VideoOutput(
-            response=output["response"],
-            n_frames_used=output["n_frames"],
-            model_runtime=output["model_runtime"],
-        )
+        return VideoOutput(response=output["response"])
 
 
 @dataclass
@@ -161,11 +145,7 @@ class Llama(HuggingFaceModel):
         filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
         messages = [Message(role="user", msg=filled_prompt, video=video_path)]
         output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
-        return VideoOutput(
-            response=output["response"],
-            n_frames_used=output["n_frames"],
-            model_runtime=output["model_runtime"],
-        )
+        return VideoOutput(response=output["response"])
 
 
 @dataclass
@@ -178,11 +158,7 @@ class Gemini(ModelInterface):
         response = self.llmlib_model.video_prompt(
             video=video_path, prompt=filled_prompt
         )
-        return VideoOutput(
-            response=response,
-            n_frames_used=None,  # Gemini handles video frames internally
-            model_runtime=None,  # Remote API doesn't provide model runtime
-        )
+        return VideoOutput(response=response)
 
 
 def load_model(args: BenchmarkArgs) -> ModelInterface:
@@ -336,7 +312,6 @@ def process_video_minicpm(
 
     msgs = [{"role": "user", "content": [filled_prompt] + frames}]
 
-    start_model_time = time.time()
     try:
         res = model.chat(
             image=None, msgs=msgs, tokenizer=tokenizer, **generation_config
@@ -346,11 +321,7 @@ def process_video_minicpm(
     except Exception as e:
         raise ValueError(f"Error generating for video: {e}") from e
 
-    model_runtime = time.time() - start_model_time
-    n_frames_used = len(frames)
-    return VideoOutput(
-        response=res, n_frames_used=n_frames_used, model_runtime=model_runtime
-    )
+    return VideoOutput(response=res)
 
 
 def benchmark_videos(args: BenchmarkArgs, posts_df: pd.DataFrame):
@@ -424,8 +395,6 @@ def process_dataset_by_row(model: HuggingFaceModel, posts_df: pd.DataFrame):
 
         logger.info("Finished %s", video_path.name)
         logger.info("  Total Runtime: %.2fs", video_runtime)
-        logger.info("  Model Runtime: %.2fs", output.model_runtime)
-        logger.info("  Num Frames:  %d", output.n_frames_used)
         logger.info("  Tokens Generated: %d", tokens_generated)
 
         row = {
@@ -433,9 +402,7 @@ def process_dataset_by_row(model: HuggingFaceModel, posts_df: pd.DataFrame):
             "Timestamp": generate_timestamp(),
             "Model ID": model.model_id,
             "Total_Runtime": video_runtime,
-            "Model_Runtime": output.model_runtime,
             "Tokens_Generated": tokens_generated,
-            "Total_Frames": output.n_frames_used,
             "Peak_Memory_Allocated": peak_memory_allocated,
             "Peak_Memory_Reserved": peak_memory_reserved,
             "Processed_Video": video_path.name,
@@ -476,11 +443,7 @@ def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
             "Run_ID": run_id,
             "Timestamp": generate_timestamp(),
             "Model ID": model.model_id,
-            "Total_Runtime": video_output.model_runtime,
-            "Model_Runtime": video_output.model_runtime,
             # TODO: "Tokens_Generated": [r.tokens_generated for r in results],
-            "Total_Frames": video_output.n_frames_used,
-            "Processed_Video": video_output.video_path,
             "Generations": video_output.response,
             "video_id": video_output.post_id,
             "vllm_concurrency": args.vllm_remote_call_concurrency,
