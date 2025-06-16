@@ -4,6 +4,8 @@ dataset
 *.mp4
 *.wav
 *.jsonl
+*.jsonl.bak
+*.code-workspace
 
 profiles/
 backup/
