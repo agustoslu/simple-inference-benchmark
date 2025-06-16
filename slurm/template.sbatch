@@ -2,8 +2,8 @@
 #SBATCH --partition lrz-hgx-h100-94x4,lrz-dgx-a100-80x8,lrz-hgx-a100-80x4
 #SBATCH --gres=gpu:1
 #SBATCH --array=0
-#SBATCH -o /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/sbatch/toxicainment/%u/%x/%a/stdout.txt
-#SBATCH -e /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/sbatch/toxicainment/%u/%x/%a/stderr.txt
+#SBATCH -o /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/%u/%x/%a/stdout.txt
+#SBATCH -e /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/%u/%x/%a/stderr.txt
 #SBATCH --job-name {JOB_NAME}
 #SBATCH --time 5:00:00
 
@@ -28,14 +28,14 @@ enroot start --rw --root \
     --env DSS_HOME=$DSS_HOME \
     --env HF_TOKEN=$HF_TOKEN \
     --env HF_HOME=$HF_HOME \
-    $CONTAINER_NAME /root/ptvenv/bin/python /workspace/code/simple-inference-benchmark/run_benchmark.py \
+    $CONTAINER_NAME bash -c "source /root/ptvenv/bin/activate && python /workspace/code/simple-inference-benchmark/run_benchmark.py \
     --model_id={MODEL_ID} \
     --n_examples=300 \
     --use_vllm=True \
     --vllm_remote_call_concurrency=64 \
     --vllm_start_server=True \
     --vllm_port $VLLM_PORT \
-    --tgt_file /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/sbatch-toxicainment/di38bec/{JOB_NAME}/all-responses.jsonl
+    --tgt_file /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/toxicainment/sbatch/di38bec/{JOB_NAME}/all-responses.jsonl"
 
 # Clean up: remove the container after job completion
 echo "Cleaning up: removing container $CONTAINER_NAME..."
