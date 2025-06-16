@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import time
@@ -8,7 +9,7 @@ from bench_lib.utils import (
     enable_info_logs,
     fill_prompt,
     read_prompt_template,
-    to_dataset,
+    to_iterof_llmreqs,
 )
 import pandas as pd
 from pydantic import BaseModel
@@ -23,11 +24,12 @@ import logging
 
 # install llmlib as described in the README.md
 from llmlib.huggingface_inference import video_to_imgs
-from llmlib.gemma3_local import Gemma3Local, Message
+from llmlib.gemma3_local import Gemma3Local
 from llmlib.vllm_model import ModelvLLM
 from llmlib.qwen2_5 import Qwen2_5
 from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
+from llmlib.base_llm import Message, LlmReq
 
 
 logger = logging.getLogger(__name__)
@@ -62,14 +64,6 @@ class ModelInterface:
     def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
         raise NotImplementedError("Subclasses can implement this method")
 
-    def process_batch_of_videos(
-        self, video_paths: list[Path], meta_data: list[dict]
-    ) -> Iterable[Output]:
-        raise NotImplementedError("Subclasses can implement this method")
-
-    def process_batch_of_posts(self, posts_df: pd.DataFrame) -> Iterable[Output]:
-        raise NotImplementedError("Subclasses can implement this method")
-
 
 @dataclass
 class HuggingFaceModel(ModelInterface):
@@ -101,27 +95,6 @@ class Gemma3Hf(HuggingFaceModel):
 @dataclass
 class ModelvLLM_Benchmark(ModelInterface):
     llmlib_model: ModelvLLM
-
-    def process_batch_of_videos(self, posts_df: pd.DataFrame) -> Iterable[Output]:
-        all_req_idx = [i for i in range(len(posts_df))]
-        posts_df = posts_df.assign(request_idx=all_req_idx)
-        posts_df.set_index("request_idx", inplace=True)
-
-        dataset = to_dataset(posts_df)
-        gen = self.llmlib_model.complete_batch(batch=dataset)
-        for output_dict in gen:
-            req_idx = output_dict["request_idx"]
-            post_id = posts_df.loc[req_idx, "video_id"]
-            if not output_dict["success"]:
-                logger.error(
-                    "Error processing post_id '%s'. Cause: %s",
-                    post_id,
-                    repr(output_dict["error"]),
-                )
-                continue
-
-            vo = Output(response=output_dict["response"], post_id=post_id)
-            yield vo
 
 
 @dataclass
@@ -436,41 +409,43 @@ def results_file() -> Path:
 
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
-    gen: Iterable[Output] = model.process_batch_of_videos(posts_df)
     run_id = generate_run_uuid()
-    for video_output in gen:
-        row = {
-            "Run_ID": run_id,
-            "Timestamp": generate_timestamp(),
-            "Model ID": model.model_id,
-            # TODO: "Tokens_Generated": [r.tokens_generated for r in results],
-            "Generations": video_output.response,
-            "video_id": video_output.post_id,
-            "vllm_concurrency": args.vllm_remote_call_concurrency,
-        }
-        df = pd.DataFrame([row])
-        save_to_results_files(df)
+    reqs: Iterable[LlmReq] = list(to_iterof_llmreqs(posts_df))
+    gen = model.llmlib_model.complete_batchof_reqs(batch=reqs)
+    for response in tqdm(gen, desc="Processing dataset", total=len(posts_df)):
+        data = response | {"run_id": run_id, "timestamp": generate_timestamp()}
+        append_to_jsonl(results_file(), data)
+
+
+def append_to_jsonl(path: Path, row: dict) -> None:
+    data_str = json.dumps(row, default=str, ensure_ascii=False)
+    with open(path, "a") as f:
+        f.write(data_str + "\n")
 
 
 def run_benchmark(args: BenchmarkArgs) -> None:
     logger.info("ToxicAInment data used ...")
     posts_df = get_posts_df()
+    posts_df = posts_df.head(args.n_examples)
     if args.restart:
         posts_df = discard_posts_already_processed(posts_df)
-    posts_df = posts_df.head(args.n_examples)
     benchmark_videos(args, posts_df)
 
 
 def discard_posts_already_processed(posts_df: pd.DataFrame) -> pd.DataFrame:
-    already_processed = pd.read_json(results_file(), orient="records", lines=True)
-    logger.info(
-        "Already processed %d posts", already_processed["Processed_Video"].nunique()
-    )
-    # TODO: Replace this ID parsing with plain access to df["video_id"] (once all generations have it)
-    processed_ids = already_processed["Processed_Video"].str[-23:-4]
-    posts_df = posts_df[~posts_df["video_id"].isin(processed_ids)]
+    results_df = read_results_file()
+    success = results_df.query("success")
+    logger.info("Already processed %d posts", success["video_id"].nunique())
+    posts_df = posts_df[~posts_df["video_id"].isin(success["video_id"])]
     logger.info("%d posts remain to be processed", len(posts_df))
     return posts_df
+
+
+def read_results_file() -> pd.DataFrame:
+    file: Path = results_file()
+    if not file.exists():
+        raise FileNotFoundError(file.absolute())
+    return pd.read_json(file, orient="records", lines=True, dtype={"video_id": "str"})
 
 
 if __name__ == "__main__":

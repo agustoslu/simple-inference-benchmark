@@ -7,7 +7,7 @@ import os
 import json
 import re
 import logging
-from llmlib.base_llm import Conversation, Message
+from llmlib.base_llm import Conversation, Message, LlmReq
 from llmlib.huggingface_inference import is_video
 from functools import cache
 
@@ -20,10 +20,16 @@ def toxicainment_data_folder() -> Path:
     return Path(dss_home) / "toxicainment"
 
 
-def get_posts_df() -> pd.DataFrame:
+def saxony_labeled_data_files() -> dict:
     folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
     media_dir = folder / "media"
-    posts_df = pd.read_csv(folder / "media_metadata.csv", dtype={"video_id": str})
+    metadata_file = folder / "media_metadata.csv"
+    return media_dir, metadata_file
+
+
+def get_posts_df() -> pd.DataFrame:
+    media_dir, metadata_file = saxony_labeled_data_files()
+    posts_df = pd.read_csv(metadata_file, dtype={"video_id": str})
     posts_df["filenames"] = (
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )
@@ -36,11 +42,18 @@ def get_posts_df() -> pd.DataFrame:
         len(posts_df.query("is_video")),
         len(posts_df.query("~is_video")),
     )
-    posts_df = posts_df.query("is_video")
     posts_df = posts_df.assign(
-        video_path=posts_df["filenames"].apply(lambda x: media_dir / x[0])
+        filenames=posts_df["filenames"].apply(lambda x: [media_dir / f for f in x]),
+        video_path=posts_df["filenames"].apply(lambda x: x[0]),
     )
-    desired_cols = ["video_id", "video_path", "author_name", "video_description"]
+    desired_cols = [
+        "video_id",
+        "video_path",
+        "author_name",
+        "video_description",
+        "filenames",
+        "is_video",
+    ]
     return posts_df[desired_cols]
 
 
@@ -60,12 +73,24 @@ def fill_prompt(row_dict: dict, template: str) -> str:
 
 def to_dataset(posts_df: pd.DataFrame) -> Iterable[Conversation]:
     for _, row in posts_df.iterrows():
-        row_dict = row.to_dict()
-        template = read_prompt_template()
-        filled_prompt = fill_prompt(row_dict=row_dict, template=template)
-        video_path = row_dict["video_path"]
-        convo = [Message(role="user", msg=filled_prompt, video=video_path)]
+        convo = to_convo(row.to_dict())
         yield convo
+
+
+def to_convo(posts_df_row: dict) -> Conversation:
+    template = read_prompt_template()
+    filled_prompt = fill_prompt(row_dict=posts_df_row, template=template)
+    convo = [Message(role="user", msg=filled_prompt, files=posts_df_row["filenames"])]
+    return convo
+
+
+def to_iterof_llmreqs(posts_df: pd.DataFrame) -> Iterable[LlmReq]:
+    for _, row in posts_df.iterrows():
+        row_dict = row.to_dict()
+        yield LlmReq(
+            convo=to_convo(row_dict),
+            metadata={"video_id": row_dict["video_id"]},
+        )
 
 
 def get_labels():

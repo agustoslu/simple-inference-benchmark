@@ -5,20 +5,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Current File",
+            "name": "Run Benchmark",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "run_benchmark.py",
             "console": "integratedTerminal",
             // "env": {
             //     "DSS_HOME": "/teamspace/studios/this_studio/dss_home"
             // },
             "args": [
-                "--use_vllm=True",
-                "--max_n_frames_per_video=10",
                 "--model_id=Qwen/Qwen2.5-VL-3B-Instruct",
-                "--vllm_max_model_len=16384",
-                "--n_examples=10"
+                "--use_vllm=True",
+                "--n_examples=100",
+                "--vllm_remote_call_concurrency=4",
+                "--restart=True",
             ],
             "justMyCode": false
         }
