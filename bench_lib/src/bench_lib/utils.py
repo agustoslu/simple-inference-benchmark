@@ -245,29 +245,36 @@ def parse_output(log_path, model_labels_csv, model_id, dataset_dir: Path):
     return model_labels_csv
 
 
-def get_answers_in_wide_format(raw_jsonl_lines: pd.DataFrame) -> pd.DataFrame:
+def get_answers_in_wide_format(
+    raw_jsonl_lines: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     df = raw_jsonl_lines
-    assert df["Processed_Video"].str.contains(".mp4$").all(), (
-        "The line below is for videos"
-    )
-    df["post_id"] = df["Processed_Video"].str[-23:-4]
+    if "post_id" not in df.columns:
+        assert df["Processed_Video"].str.contains(".mp4$").all(), (
+            "The line below is for videos"
+        )
+        df["post_id"] = df["Processed_Video"].str[-23:-4]
     assert df["Run_ID"].nunique() == 1, "There should be only one run id"
     dfs = []
     unparsable = []
     for i, row in df.iterrows():
         try:
-            gens = row["Generations"]
+            gens = row[Cols.generations]
             if isinstance(gens, list):
                 gens = gens[0]
             assert isinstance(gens, str), f"Generations must be a str, not {type(gens)}"
             answers = json_repair.loads(gens)["answers"]
+            if answers == "":
+                unparsable.append(row)
+                continue
+
             extra_data = {
                 Cols.run_id: row[Cols.run_id],
                 Cols.model_id: row[Cols.model_id],
                 Cols.post_id: row[Cols.post_id],
             }
             dfs.append(pd.DataFrame(answers).assign(**extra_data))
-        except (json.JSONDecodeError, TypeError) as e:
+        except (json.JSONDecodeError, TypeError, KeyError, AttributeError) as e:
             unparsable.append(row)
 
     answers_long = pd.concat(dfs, ignore_index=True)
@@ -310,6 +317,7 @@ class Cols:
     post_id = "post_id"
     run_id = "Run_ID"
     model_id = "Model ID"
+    generations = "Generations"
 
 
 def enable_info_logs() -> None:
