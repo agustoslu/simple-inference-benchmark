@@ -9,6 +9,7 @@ from bench_lib.utils import (
     enable_info_logs,
     fill_prompt,
     read_prompt_template,
+    saxony_dataset_dir,
     to_iterof_llmreqs,
 )
 import pandas as pd
@@ -46,6 +47,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     output_token_limit: int = 512
     compile: bool = False
     restart: bool = False
+    dataset_dir: Path = saxony_dataset_dir()
     tgt_file: Path = "responses.jsonl"
 
     vllm_start_server: bool = False
@@ -433,8 +435,7 @@ def append_to_jsonl(path: Path, row: dict) -> None:
 
 
 def run_benchmark(args: BenchmarkArgs) -> None:
-    logger.info("ToxicAInment data used ...")
-    posts_df = get_posts_df()
+    posts_df = get_posts_df(dataset_dir=args.dataset_dir)
     posts_df = posts_df.head(args.n_examples)
     if args.restart:
         posts_df = discard_posts_already_processed(posts_df, args.tgt_file)

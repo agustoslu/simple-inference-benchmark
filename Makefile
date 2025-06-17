@@ -8,7 +8,8 @@ run-benchmark:
 		--use_vllm True \
 		--vllm_remote_call_concurrency 8 \
 		--restart False \
-		--vllm_start_server False
+		--vllm_start_server False \
+		--dataset_dir /mnt/disk16tb/globus_shared/20250516_btw_3pct_subset
 
 
 vllm-server:
@@ -16,7 +17,7 @@ vllm-server:
 		--max-model-len 32768 \
 		--max-seq-len-to-capture 32768 \
 		--dtype auto \
-		--allowed-local-media-path=/home/ \
+		--allowed-local-media-path=/ \
 		--limit-mm-per-prompt "image=50,video=1" \
 		--disable-log-requests \
 		--port 8000 \

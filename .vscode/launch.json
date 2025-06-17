@@ -17,8 +17,10 @@
                 "--model_id=Qwen/Qwen2.5-VL-3B-Instruct",
                 "--use_vllm=True",
                 "--n_examples=100",
-                "--vllm_remote_call_concurrency=4",
+                "--vllm_remote_call_concurrency=8",
                 "--restart=True",
+                "--vllm_start_server=False",
+                "--dataset_dir=/mnt/disk16tb/globus_shared/20250516_btw_3pct_subset",
             ],
             "justMyCode": false
         }

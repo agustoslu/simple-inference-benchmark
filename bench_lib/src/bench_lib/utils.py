@@ -15,21 +15,36 @@ from functools import cache
 logger = logging.getLogger(__name__)
 
 
-def toxicainment_data_folder() -> Path:
+def dataset_files(dataset_dir: Path) -> tuple[Path, Path]:
+    media_dir = dataset_dir / "media"
+    assert_exists(media_dir)
+
+    csv = dataset_dir / "media_metadata.csv"
+    if csv.exists():
+        metadata_file = csv
+        posts_df = pd.read_csv(metadata_file, dtype={"video_id": "str"})
+        return media_dir, posts_df
+
+    metadata_file = dataset_dir / "ldf.parquet"
+    assert_exists(metadata_file)
+    posts_df = pd.read_parquet(metadata_file)
+    posts_df["video_id"] = posts_df["video_id"].astype("str")
+    posts_df["filenames"] = posts_df["filenames"].astype("str")
+    return media_dir, posts_df
+
+
+def assert_exists(path: Path) -> None:
+    if not path.exists():
+        raise FileNotFoundError(path.absolute())
+
+
+def saxony_dataset_dir() -> Path:
     dss_home = os.environ["DSS_HOME"]
-    return Path(dss_home) / "toxicainment"
+    return Path(dss_home) / "toxicainment" / "2025-02-07-saxony-labeled-data"
 
 
-def saxony_labeled_data_files() -> dict:
-    folder = toxicainment_data_folder() / "2025-02-07-saxony-labeled-data"
-    media_dir = folder / "media"
-    metadata_file = folder / "media_metadata.csv"
-    return media_dir, metadata_file
-
-
-def get_posts_df() -> pd.DataFrame:
-    media_dir, metadata_file = saxony_labeled_data_files()
-    posts_df = pd.read_csv(metadata_file, dtype={"video_id": str})
+def get_posts_df(dataset_dir: Path) -> pd.DataFrame:
+    media_dir, posts_df = dataset_files(dataset_dir)
     posts_df["filenames"] = (
         posts_df["filenames"].str.replace("\n", ",").apply(literal_eval)
     )
@@ -156,12 +171,12 @@ def clean_json_string(json_string):
     return cleaned
 
 
-def parse_output(log_path, model_labels_csv, model_id):
+def parse_output(log_path, model_labels_csv, model_id, dataset_dir: Path):
     df = pd.read_json(log_path, orient="records", lines=True)
     model_labels = []
     unparsable_videos = []
 
-    posts_df = get_posts_df()
+    posts_df = get_posts_df(dataset_dir)
     video_meta = {
         Path(v["video_path"]).name.replace(".mp4", ""): v["author_name"]
         for _, v in posts_df.iterrows()
