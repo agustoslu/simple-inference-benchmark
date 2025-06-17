@@ -599,7 +599,6 @@ def load_human_labels(long: bool = False) -> tuple[pd.DataFrame, list[str], list
         )
         comments["variable"] = comments["variable"].str.replace("_comment", "")
         human_labels = pd.merge(answers, comments, on=id_cols + ["variable"])
-        pass
 
     return human_labels, questions, comment_cols
 
