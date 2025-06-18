@@ -35,7 +35,7 @@ enroot start --rw --root \
     --n_examples=300 \
     --use_vllm=True \
     --vllm_remote_call_concurrency=32 \
-    --vllm_start_server=True \
+    --vllm_start_server=False \
     --vllm_port $VLLM_PORT \
     --vllm_allowed_local_media_path /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/ \
     --vllm_tensor_parallel_size {N_GPUS} \
