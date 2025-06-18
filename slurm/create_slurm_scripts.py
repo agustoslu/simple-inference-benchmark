@@ -50,4 +50,3 @@ for i, case in enumerate(CASES):
     args = parse_args()
     if args.launch:
         os.system(f"sbatch {script_path}")
-        print(f"Launched array job: '{script_path}'")
