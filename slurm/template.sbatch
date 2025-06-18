@@ -31,11 +31,11 @@ enroot start --rw --root \
     --env BUGSNAG_API_KEY=$BUGSNAG_API_KEY \
     $CONTAINER_NAME bash -c "source /root/ptvenv/bin/activate && python /workspace/code/simple-inference-benchmark/run_benchmark.py \
     --model_id={MODEL_ID} \
-    --restart=True \
+    --restart=False \
     --n_examples=300 \
     --use_vllm=True \
     --vllm_remote_call_concurrency=32 \
-    --vllm_start_server=False \
+    --vllm_start_server=True \
     --vllm_port $VLLM_PORT \
     --vllm_allowed_local_media_path /dss/dssfs02/lwp-dss-0001/pn76je/pn76je-dss-0000/ \
     --vllm_tensor_parallel_size {N_GPUS} \
