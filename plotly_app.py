@@ -18,7 +18,7 @@ df_long = pd.concat([
               label=df['value_ai'],
               comment=df['comment_ai'],
               model=df['Model ID'])
-])
+]) 
 
 app = Dash(__name__)
 
@@ -43,7 +43,7 @@ app.layout = html.Div([
 @callback(
     Output('graph-content', 'figure'),
     Input('model-dropdown', 'value'),
-    Input('rationale-dropdown', 'value')
+    Input('rationale-dropdown', 'value'),
 )
 
 def update_graph(selected_model, rationale_type):
@@ -52,19 +52,22 @@ def update_graph(selected_model, rationale_type):
     jitter_strength = 0.1
     dff['jittered_x'] = dff['rationale_hashtag'].astype(float) + np.random.uniform(-jitter_strength, jitter_strength, size=len(dff))
     dff['jittered_y'] = dff['rationale_audio'].astype(float) + np.random.uniform(-jitter_strength, jitter_strength, size=len(dff))
+    dff['label_alignment'] = (dff['label'] == dff.groupby(['post_id', 'variable'])['label'].transform('max')).astype(int)
 
-    fig = px.scatter(
+    fig = px.scatter_3d(
         dff,
         x='jittered_x',
         y='jittered_y',
+        z='label_alignment',
         color='source',
         symbol='label',
         hover_data=['variable', 'post_id', 'comment'],
-        labels={'jittered_x': 'Hashtag', 'jittered_y': 'Audio'}
+        labels={'jittered_x': 'Hashtag', 'jittered_y': 'Audio', 'label_alignment': 'Label Alignment'}
     )
 
     fig.update_layout(
-        title=f'Rationale Comparison for Model: {selected_model}',
+    title=f'Rationale & Label Alignment for Model: {selected_model}',
+    scene=dict(
         xaxis=dict(
             tickmode='array',
             tickvals=[0, 1],
@@ -76,9 +79,15 @@ def update_graph(selected_model, rationale_type):
             tickvals=[0, 1],
             ticktext=['False', 'True'],
             title='Audio'
+        ),
+        zaxis=dict(
+            tickmode='array',
+            tickvals=[0, 1],
+            ticktext=['Disagree', 'Agree'],
+            title='Label Alignment'
         )
     )
-
+)
     return fig
 
 if __name__ == '__main__':
