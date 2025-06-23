@@ -37,22 +37,29 @@ app.layout = html.Div([
         value='rationale_hashtag',
         id='rationale-dropdown'
     ),
-    dcc.Graph(id='graph-content')
+    dcc.Input(id='post-id-input', type='text', placeholder='Enter Post ID (optional)', debounce=True, style={'marginBottom': '10px'}),
+    dcc.Graph(id='graph-content'),
 ])
 
 @callback(
     Output('graph-content', 'figure'),
     Input('model-dropdown', 'value'),
     Input('rationale-dropdown', 'value'),
+    Input('post-id-input', 'value')
 )
 
-def update_graph(selected_model, rationale_type):
+def update_graph(selected_model, rationale_type, search_postid):
     dff = df_long[df_long['model'] == selected_model].copy()
 
     jitter_strength = 0.1
     dff['jittered_x'] = dff['rationale_hashtag'].astype(float) + np.random.uniform(-jitter_strength, jitter_strength, size=len(dff))
     dff['jittered_y'] = dff['rationale_audio'].astype(float) + np.random.uniform(-jitter_strength, jitter_strength, size=len(dff))
     dff['label_alignment'] = (dff['label'] == dff.groupby(['post_id', 'variable'])['label'].transform('max')).astype(int)
+
+    if search_postid and search_postid.isdigit():
+        dff['highlight'] = dff['post_id'].astype(str) == search_postid
+    else:
+        dff['highlight'] = False
 
     fig = px.scatter_3d(
         dff,
