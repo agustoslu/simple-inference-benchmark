@@ -5,33 +5,45 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import os
 
-df = pd.read_csv(
-    "/home/tanalp/toxicainment/simple-inference-benchmark/notebooks/merged_comments.csv"
-)
+base_path = "/home/tanalp/toxicainment/simple-inference-benchmark/notebooks/merged_data"
 
-df_long = pd.concat(
-    [
-        df.assign(
-            source="human",
-            rationale_hashtag=df["comment_contains_hashtag_human"],
-            rationale_audio=df["comment_contains_audio_human"],
-            label=df["value_human"],
-            comment=df["comment_human"],
-            model=df["Model ID"],
-            annotator=df["classification_by"],
-        ),
-        df.assign(
-            source="ai",
-            rationale_hashtag=df["comment_contains_hashtag_ai"],
-            rationale_audio=df["comment_contains_audio_ai"],
-            label=df["value_ai"],
-            comment=df["comment_ai"],
-            model=df["Model ID"],
-            annotator="",
-        ),
-    ]
-)
+model_names = set()
+df_long_list = []
+
+for file in os.listdir(base_path):
+    if file.endswith(".csv"):
+        df = pd.read_csv(os.path.join(base_path, file))
+        df_long_list.append(
+            pd.concat(
+                [
+                    df.assign(
+                        source="human",
+                        rationale_hashtag=df["comment_contains_hashtag_human"],
+                        rationale_audio=df["comment_contains_audio_human"],
+                        label=df["value_human"],
+                        comment=df["comment_human"],
+                        model=df["Model ID"],
+                        annotator=df["classification_by"],
+                    ),
+                    df.assign(
+                        source="ai",
+                        rationale_hashtag=df["comment_contains_hashtag_ai"],
+                        rationale_audio=df["comment_contains_audio_ai"],
+                        label=df["value_ai"],
+                        comment=df["comment_ai"],
+                        model=df["Model ID"],
+                        annotator="",
+                    ),
+                ]
+            )
+        )
+        if "Model ID" in df.columns:
+            model_names.update(df["Model ID"].dropna().unique())
+
+model_names = sorted(model_names)
+df_long = pd.concat(df_long_list, ignore_index=True)
 
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.LUX, dbc.icons.FONT_AWESOME])
@@ -43,11 +55,8 @@ app.layout = html.Div(
             style={"textAlign": "center"},
         ),
         dcc.Dropdown(
-            options=[
-                {"label": m, "value": m}
-                for m in sorted(df["Model ID"].dropna().unique())
-            ],
-            value=sorted(df["Model ID"].dropna().unique())[0],
+            options=[{"label": m, "value": m} for m in model_names],
+            value=model_names[0] if model_names else None,
             id="model-dropdown",
         ),
         dcc.Input(
