@@ -10,7 +10,7 @@ import logging
 from llmlib.base_llm import Conversation, Message, LlmReq
 from llmlib.huggingface_inference import is_video
 from functools import cache
-
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -311,6 +311,48 @@ def fix_column_typos(df: pd.DataFrame) -> pd.DataFrame:
     from_to = {k: v for k, v in from_to.items() if k in df.columns}
     df = df.rename(columns=from_to)
     return df
+
+
+def mute_video(dataset_dir: Path, input_path: Path) -> Path:
+    output_path = Path(dataset_dir / f"{input_path.stem}_muted.mp4")
+    assert is_video(input_path), f"Input path {input_path.stem} is not a video file"
+    if not output_path.exists():
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_path),
+            "-an",  # remove audio
+            "-c:v",
+            "copy",
+            str(output_path),
+        ]
+        subprocess.run(
+            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    return output_path
+
+
+@cache
+def load_transcript_df(dataset_dir: Path) -> pd.DataFrame:
+    transcript_dir = dataset_dir / "transcripts"
+    assert_exists(transcript_dir)
+    csv = transcript_dir / "whisper_transcriptions.csv"
+    if not csv.exists():
+        raise FileNotFoundError(csv)
+    df = pd.read_csv(csv)
+    df["video_id"] = df["video_id"].astype(str)
+    df = df.set_index("video_id")
+    return df
+
+
+def get_transcript(dataset_dir: Path, video_id: str) -> list[dict]:
+    df = load_transcript_df(dataset_dir)
+    video_id = str(video_id)
+    if video_id not in df.index:
+        raise KeyError(f"Transcript for video_id {video_id} not found.")
+    row = df.loc[video_id]
+    return row["chunks"]
 
 
 class Cols:

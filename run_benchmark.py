@@ -29,10 +29,20 @@ from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local
 from llmlib.vllm_model import ModelvLLM
 from llmlib.qwen2_5 import Qwen2_5
+from llmlib.qwen_2_5_omni import Qwen2_5_Omni
 from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
 from llmlib.base_llm import Message, LlmReq
 from llmlib.vllmserver import spinup_vllm_server
+from llmlib.io import (
+    Input,
+    OnlyVideo,
+    TranscribedVideo,
+    MutedVideo,
+    MutedNoTranscriptVideo,
+    Output,
+    strategy_map,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +59,7 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     restart: bool = False
     dataset_dir: Path = saxony_dataset_dir()
     tgt_file: Path = "responses.jsonl"
+    input_strategy: str = "muted"
 
     vllm_start_server: bool = False
     vllm_port: int = 8000
@@ -57,19 +68,15 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     vllm_tensor_parallel_size: int = 1
 
 
-# TODO: Move to llmlib
-@dataclass
-class Output:
-    response: str
-    post_id: str | None = None
-
-
 @dataclass
 class ModelInterface:
     model_id: str
     args: BenchmarkArgs
+    input_strategy: Input
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
         raise NotImplementedError("Subclasses can implement this method")
 
 
@@ -81,9 +88,15 @@ class HuggingFaceModel(ModelInterface):
 
 @dataclass
 class MiniCPM(HuggingFaceModel):
-    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
         return process_video_minicpm(
-            video_path=video_path, args=self.args, hf=self, meta_data=meta_data
+            video_path=video_path,
+            args=self.args,
+            hf=self,
+            meta_data=meta_data,
+            **kwargs,
         )
 
 
@@ -91,12 +104,15 @@ class MiniCPM(HuggingFaceModel):
 class Gemma3Hf(HuggingFaceModel):
     llmlib_model: Gemma3Local
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
-        prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
-
-        messages = [Message(role="user", msg=filled_prompt, video=video_path)]
-        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
+        prepared = self.input_strategy.prepare(
+            video_path=video_path, meta_data=meta_data, **kwargs
+        )
+        output = self.llmlib_model.complete_msgs(
+            msgs=prepared["messages"], output_dict=True
+        )
         return Output(response=output["response"])
 
 
@@ -109,11 +125,31 @@ class ModelvLLM_Benchmark(ModelInterface):
 class Qwen(HuggingFaceModel):
     llmlib_model: Qwen2_5
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
-        prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
-        messages = [Message(role="user", msg=filled_prompt, video=video_path)]
-        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
+        prepared = self.input_strategy.prepare(
+            video_path=video_path, meta_data=meta_data, **kwargs
+        )
+        output = self.llmlib_model.complete_msgs(
+            msgs=prepared["messages"], output_dict=True
+        )
+        return Output(response=output["response"])
+
+
+@dataclass
+class Qwen_Omni(HuggingFaceModel):
+    llmlib_model: Qwen2_5_Omni
+
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
+        prepared = self.input_strategy.prepare(
+            video_path=video_path, meta_data=meta_data, **kwargs
+        )
+        output = self.llmlib_model.complete_msgs(
+            msgs=prepared["messages"], output_dict=True
+        )
         return Output(response=output["response"])
 
 
@@ -121,11 +157,15 @@ class Qwen(HuggingFaceModel):
 class Llama(HuggingFaceModel):
     llmlib_model: Llama_4
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
-        prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
-        messages = [Message(role="user", msg=filled_prompt, video=video_path)]
-        output = self.llmlib_model.complete_msgs(msgs=messages, output_dict=True)
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
+        prepared = self.input_strategy.prepare(
+            video_path=video_path, meta_data=meta_data, **kwargs
+        )
+        output = self.llmlib_model.complete_msgs(
+            msgs=prepared["messages"], output_dict=True
+        )
         return Output(response=output["response"])
 
 
@@ -133,34 +173,40 @@ class Llama(HuggingFaceModel):
 class Gemini(ModelInterface):
     llmlib_model: GeminiAPI
 
-    def process_video(self, video_path: str | Path, meta_data: dict) -> Output:
-        prompt_template = read_prompt_template()
-        filled_prompt = fill_prompt(row_dict=meta_data, template=prompt_template)
-        response = self.llmlib_model.video_prompt(
-            video=video_path, prompt=filled_prompt
+    def process_video(
+        self, video_path: str | Path, meta_data: dict, **kwargs
+    ) -> Output:
+        prepared = self.input_strategy.prepare(
+            video_path=video_path, meta_data=meta_data, **kwargs
         )
-        return Output(response=response)
+        output = self.llmlib_model.complete_msgs(
+            msgs=prepared["messages"], output_dict=True
+        )
+        return Output(response=output["response"])
 
 
-def load_model(args: BenchmarkArgs) -> ModelInterface:
+def load_model(args: BenchmarkArgs, input_strategy: Input) -> ModelInterface:
     """Loads model from huggingface"""
     model_id = args.model_id
     if args.use_vllm:
-        return load_vllm_model(args)
+        return load_vllm_model(args, input_strategy)
 
     logger.info("Initializing model '%s'...", model_id)
 
     if "gemma-3" in model_id:
-        return load_gemma3_huggingface(args)
+        return load_gemma3_huggingface(args, input_strategy)
 
-    if "Qwen" in model_id:
-        return load_qwen(args)
+    if "Qwen2.5-VL" in model_id:
+        return load_qwen(args, input_strategy)
+
+    if "Qwen2.5-Omni" in model_id:
+        return load_qwen_omni(args, input_strategy)
 
     if "Llama" in model_id:
-        return load_llama(args)
+        return load_llama(args, input_strategy)
 
     if "gemini" in model_id.lower():
-        return load_gemini(args)
+        return load_gemini(args, input_strategy)
 
     model = AutoModel.from_pretrained(
         model_id,
@@ -175,10 +221,16 @@ def load_model(args: BenchmarkArgs) -> ModelInterface:
         model = torch.compile(model)
 
     tokenizer = create_tokenizer(model_id)
-    return MiniCPM(model_id=model_id, model=model, tokenizer=tokenizer, args=args)
+    return MiniCPM(
+        model_id=model_id,
+        model=model,
+        tokenizer=tokenizer,
+        args=args,
+        input_strategy=input_strategy,
+    )
 
 
-def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
+def load_gemma3_huggingface(args: BenchmarkArgs, input_strategy: Input) -> Gemma3Hf:
     llmlib_model = Gemma3Local(
         model_id=args.model_id,
         max_n_frames_per_video=args.max_n_frames_per_video,
@@ -190,10 +242,11 @@ def load_gemma3_huggingface(args: BenchmarkArgs) -> Gemma3Hf:
         model_id=args.model_id,
         args=args,
         llmlib_model=llmlib_model,
+        input_strategy=input_strategy,
     )
 
 
-def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
+def load_vllm_model(args: BenchmarkArgs, input_strategy: Input) -> ModelvLLM_Benchmark:
     logger.info("Using vLLM model '%s'...", args.model_id)
     llmlib_model = ModelvLLM(
         model_id=args.model_id,
@@ -203,11 +256,14 @@ def load_vllm_model(args: BenchmarkArgs) -> ModelvLLM_Benchmark:
         timeout_secs=300,
     )
     return ModelvLLM_Benchmark(
-        model_id=args.model_id, args=args, llmlib_model=llmlib_model
+        model_id=args.model_id,
+        args=args,
+        llmlib_model=llmlib_model,
+        input_strategy=input_strategy,
     )
 
 
-def load_qwen(args: BenchmarkArgs) -> Qwen:
+def load_qwen(args: BenchmarkArgs, input_strategy: Input) -> Qwen:
     llmlib_model = Qwen2_5(
         model_id=args.model_id,
         max_n_frames_per_video=args.max_n_frames_per_video,
@@ -219,11 +275,29 @@ def load_qwen(args: BenchmarkArgs) -> Qwen:
         tokenizer=llmlib_model.processor.tokenizer,
         args=args,
         llmlib_model=llmlib_model,
+        input_strategy=input_strategy,
     )
     return qwen
 
 
-def load_llama(args: BenchmarkArgs) -> Llama:
+def load_qwen_omni(args: BenchmarkArgs, input_strategy: Input) -> Qwen_Omni:
+    llmlib_model = Qwen2_5_Omni(
+        model_id=args.model_id,
+        max_n_frames_per_video=args.max_n_frames_per_video,
+        max_new_tokens=args.output_token_limit,
+    )
+    qwen_omni = Qwen_Omni(
+        model_id=args.model_id,
+        model=llmlib_model.model,
+        tokenizer=llmlib_model.processor.tokenizer,
+        args=args,
+        llmlib_model=llmlib_model,
+        input_strategy=input_strategy,
+    )
+    return qwen_omni
+
+
+def load_llama(args: BenchmarkArgs, input_strategy: Input) -> Llama:
     llmlib_model = Llama_4(
         model_id=args.model_id,
         max_n_frames_per_video=args.max_n_frames_per_video,
@@ -235,11 +309,12 @@ def load_llama(args: BenchmarkArgs) -> Llama:
         tokenizer=llmlib_model.processor.tokenizer,
         args=args,
         llmlib_model=llmlib_model,
+        input_strategy=input_strategy,
     )
     return llama
 
 
-def load_gemini(args: BenchmarkArgs) -> Gemini:
+def load_gemini(args: BenchmarkArgs, input_strategy: Input) -> Gemini:
     llmlib_model = GeminiAPI(
         model_id=args.model_id,
         max_output_tokens=args.output_token_limit,
@@ -247,7 +322,12 @@ def load_gemini(args: BenchmarkArgs) -> Gemini:
         delete_files_after_use=False,
         json_schema=None,  # SaxonyDeletedContentSchema,
     )
-    return Gemini(model_id=args.model_id, args=args, llmlib_model=llmlib_model)
+    return Gemini(
+        model_id=args.model_id,
+        args=args,
+        llmlib_model=llmlib_model,
+        input_strategy=input_strategy,
+    )
 
 
 def create_tokenizer(model_id):
@@ -265,7 +345,11 @@ class SaxonyDeletedContentSchema(BaseModel):
 
 
 def process_video_minicpm(
-    video_path: str | Path, args: BenchmarkArgs, hf: HuggingFaceModel, meta_data: dict
+    video_path: str | Path,
+    args: BenchmarkArgs,
+    hf: HuggingFaceModel,
+    meta_data: dict,
+    **kwargs,
 ) -> Output:
     model, tokenizer = hf.model, hf.tokenizer
 
@@ -307,7 +391,8 @@ def process_video_minicpm(
 
 
 def benchmark_videos(args: BenchmarkArgs, posts_df: pd.DataFrame):
-    model = load_model(args)
+    input_strategy = strategy_map[args.input_strategy]()
+    model = load_model(args, input_strategy=input_strategy)
     if args.use_vllm:
         batch_process_dataset(model=model, posts_df=posts_df, tgt_file=args.tgt_file)
     elif isinstance(model, HuggingFaceModel):
@@ -324,11 +409,17 @@ def process_dataset_by_row_remotely(
     this_run = generate_run_uuid()
 
     for _, row in tqdm(list(posts_df.iterrows()), desc="Benchmarking model"):
-        video_path = row["video_path"]
+        video_path = row["filenames"][0]
         logger.info("\nProcessing: %s", video_path)
 
         start_time = time.time()
-        output = model.process_video(video_path=video_path, meta_data=row.to_dict())
+        output = model.process_video(
+            video_path=video_path,
+            meta_data=row.to_dict(),
+            transcript=row.get("transcript"),
+            dataset_dir=args.dataset_dir,
+            video_id=row["video_id"],
+        )
         video_runtime = time.time() - start_time
 
         logger.info("Finished %s", video_path.name)
@@ -355,7 +446,7 @@ def process_dataset_by_row(
     this_run = generate_run_uuid()
 
     for _, row in tqdm(list(posts_df.iterrows()), desc="Benchmarking model"):
-        video_path = row["video_path"]
+        video_path = row["filenames"][0]
         logger.info("\nProcessing: %s", video_path)
         start_time = time.time()
         initial_memory_allocated = torch.cuda.memory_allocated() / 1e9
@@ -367,7 +458,13 @@ def process_dataset_by_row(
             initial_memory_reserved,
         )
 
-        output = model.process_video(video_path=video_path, meta_data=row.to_dict())
+        output = model.process_video(
+            video_path=video_path,
+            meta_data=row.to_dict(),
+            transcript=row.get("transcript"),
+            dataset_dir=args.dataset_dir,
+            video_id=row["video_id"],
+        )
         tokens_generated = len(model.tokenizer.tokenize(str((output.response))))
         peak_memory_allocated = torch.cuda.max_memory_allocated() / 1e9
         peak_memory_reserved = torch.cuda.max_memory_reserved() / 1e9
