@@ -53,8 +53,8 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     model_id: str = "google/gemma-3-4b-it"
     n_examples: int = 2
     use_vllm: bool = False
-    max_n_frames_per_video: int = 50
-    output_token_limit: int = 512
+    max_n_frames_per_video: int = 3
+    output_token_limit: int = 5000
     compile: bool = False
     restart: bool = False
     dataset_dir: Path = saxony_dataset_dir()
@@ -180,9 +180,13 @@ class Gemini(ModelInterface):
             video_path=video_path, meta_data=meta_data, **kwargs
         )
         output = self.llmlib_model.complete_msgs(
-            msgs=prepared["messages"], output_dict=True
+            msgs=prepared["messages"], output_dict=True, response_logprobs=True
         )
-        return Output(response=output["response"])
+        return Output(
+            response=output["response"],
+            reasoning=output["reasoning"],
+            logprobs=output["logprobs"],
+        )
 
 
 def load_model(args: BenchmarkArgs, input_strategy: Input) -> ModelInterface:
@@ -320,7 +324,7 @@ def load_gemini(args: BenchmarkArgs, input_strategy: Input) -> Gemini:
         max_output_tokens=args.output_token_limit,
         location="us-central1",
         delete_files_after_use=False,
-        json_schema=None,  # SaxonyDeletedContentSchema,
+        # json_schema=None,  # SaxonyDeletedContentSchema,
     )
     return Gemini(
         model_id=args.model_id,
@@ -433,6 +437,8 @@ def process_dataset_by_row_remotely(
             "Total_Runtime": video_runtime,
             "Processed_Video": video_path.name,
             "Generations": output.response,
+            "Reasoning": output.reasoning,
+            "Logprobs": output.logprobs,
             "video_id": row["video_id"],
         }
 

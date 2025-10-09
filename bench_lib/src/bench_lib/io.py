@@ -105,6 +105,8 @@ class MutedNoTranscriptVideo(Input):
 @dataclass
 class Output:
     response: str
+    reasoning: str | None = None
+    logprobs: dict | None = None
     post_id: str | None = None
 
 
