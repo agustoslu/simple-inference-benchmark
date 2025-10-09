@@ -348,7 +348,6 @@ def load_transcript_df(dataset_dir: Path) -> pd.DataFrame:
 
 def get_transcript(dataset_dir: Path, video_id: str) -> list[dict]:
     df = load_transcript_df(dataset_dir)
-    video_id = str(video_id)
     if video_id not in df.index:
         raise KeyError(f"Transcript for video_id {video_id} not found.")
     row = df.loc[video_id]
