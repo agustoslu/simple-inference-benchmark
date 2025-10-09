@@ -12,6 +12,15 @@ from bench_lib.utils import (
     saxony_dataset_dir,
     to_iterof_llmreqs,
 )
+from bench_lib.io import (
+    Input,
+    OnlyVideo,
+    TranscribedVideo,
+    MutedVideo,
+    MutedNoTranscriptVideo,
+    Output,
+    strategy_map,
+)
 import pandas as pd
 from pydantic import BaseModel
 import torch
@@ -34,15 +43,6 @@ from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
 from llmlib.base_llm import Message, LlmReq
 from llmlib.vllmserver import spinup_vllm_server
-from llmlib.io import (
-    Input,
-    OnlyVideo,
-    TranscribedVideo,
-    MutedVideo,
-    MutedNoTranscriptVideo,
-    Output,
-    strategy_map,
-)
 
 
 logger = logging.getLogger(__name__)
