@@ -53,13 +53,14 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     model_id: str = "google/gemma-3-4b-it"
     n_examples: int = 2
     use_vllm: bool = False
-    max_n_frames_per_video: int = 3
+    max_n_frames_per_video: int = 50
     output_token_limit: int = 5000
     compile: bool = False
     restart: bool = False
     dataset_dir: Path = saxony_dataset_dir()
-    tgt_file: Path = "responses.jsonl"
+    tgt_file: Path = "benchmark_responses.jsonl"
     input_strategy: str = "muted"
+    forced_choice: bool = False
 
     vllm_start_server: bool = False
     vllm_port: int = 8000
@@ -67,15 +68,26 @@ class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     vllm_allowed_local_media_path: str = "/home/"
     vllm_tensor_parallel_size: int = 1
 
+    run_id: str | None = (
+        None  # for gemini runs, create blobs with this run_id to prevent race conditions
+    )
+
 
 @dataclass
 class ModelInterface:
     model_id: str
     args: BenchmarkArgs
     input_strategy: Input
+    forced_choice: bool | None
+    run_id: str | None
 
     def process_video(
-        self, video_path: str | Path, meta_data: dict, **kwargs
+        self,
+        video_path: str | Path,
+        meta_data: dict,
+        forced_choice: bool,
+        run_id: str | None,
+        **kwargs,
     ) -> Output:
         raise NotImplementedError("Subclasses can implement this method")
 
@@ -121,19 +133,40 @@ class ModelvLLM_Benchmark(ModelInterface):
     llmlib_model: ModelvLLM
 
 
+
 @dataclass
 class Qwen(HuggingFaceModel):
     llmlib_model: Qwen2_5
 
     def process_video(
-        self, video_path: str | Path, meta_data: dict, **kwargs
+        self,
+        video_path: str | Path,
+        meta_data: dict,
+        forced_choice: bool,
+        run_id: str | None,
+        **kwargs,
     ) -> Output:
         prepared = self.input_strategy.prepare(
             video_path=video_path, meta_data=meta_data, **kwargs
         )
-        output = self.llmlib_model.complete_msgs(
-            msgs=prepared["messages"], output_dict=True
-        )
+        if forced_choice:
+            output = self.llmlib_model.forced_choice(
+                msgs=prepared["messages"],
+                categories=[
+                    "is_political",
+                    "is_saxony",
+                    "is_intolerant",
+                    "is_hedonic_entertainment",
+                    "is_eudaimonic_entertainment",
+                ],
+                choices=["yes", "no"],
+                output_dict=True,
+                max_new_tokens=1,
+            )
+        else:
+            output = self.llmlib_model.complete_msgs(
+                msgs=prepared["messages"], output_dict=True
+            )
         return Output(response=output["response"])
 
 
@@ -174,18 +207,26 @@ class Gemini(ModelInterface):
     llmlib_model: GeminiAPI
 
     def process_video(
-        self, video_path: str | Path, meta_data: dict, **kwargs
+        self, video_path: str | Path, meta_data: dict, forced_choice=False, **kwargs
     ) -> Output:
         prepared = self.input_strategy.prepare(
             video_path=video_path, meta_data=meta_data, **kwargs
         )
         output = self.llmlib_model.complete_msgs(
-            msgs=prepared["messages"], output_dict=True, response_logprobs=True
+            msgs=prepared["messages"],
+            output_dict=True,
+            strategy=prepared["strategy"],
+            run_id=prepared["run_id"],
         )
         return Output(
             response=output["response"],
-            reasoning=output["reasoning"],
-            logprobs=output["logprobs"],
+            # reasoning=output["reasoning"],
+            # logprobs=output[
+            #    "logprobs"
+            # ],  # in one go all questions answered using initial prompt
+            # #forced_choice_logprobs=output[
+            #     "forced_choice_logprobs"
+            # ],  # test-time forced choice logprobs
         )
 
 
@@ -264,6 +305,8 @@ def load_vllm_model(args: BenchmarkArgs, input_strategy: Input) -> ModelvLLM_Ben
         args=args,
         llmlib_model=llmlib_model,
         input_strategy=input_strategy,
+        forced_choice=args.forced_choice,
+        run_id=args.run_id,
     )
 
 
@@ -280,6 +323,7 @@ def load_qwen(args: BenchmarkArgs, input_strategy: Input) -> Qwen:
         args=args,
         llmlib_model=llmlib_model,
         input_strategy=input_strategy,
+        forced_choice=args.forced_choice,
     )
     return qwen
 
@@ -323,7 +367,9 @@ def load_gemini(args: BenchmarkArgs, input_strategy: Input) -> Gemini:
         model_id=args.model_id,
         max_output_tokens=args.output_token_limit,
         location="us-central1",
-        delete_files_after_use=False,
+        delete_files_after_use=True,
+        include_thoughts=False,
+        response_logprobs=False,
         # json_schema=None,  # SaxonyDeletedContentSchema,
     )
     return Gemini(
@@ -331,6 +377,8 @@ def load_gemini(args: BenchmarkArgs, input_strategy: Input) -> Gemini:
         args=args,
         llmlib_model=llmlib_model,
         input_strategy=input_strategy,
+        forced_choice=args.forced_choice,
+        run_id=args.run_id,
     )
 
 
@@ -420,9 +468,11 @@ def process_dataset_by_row_remotely(
         output = model.process_video(
             video_path=video_path,
             meta_data=row.to_dict(),
+            forced_choice=args.forced_choice,
             transcript=row.get("transcript"),
             dataset_dir=args.dataset_dir,
             video_id=row["video_id"],
+            run_id=this_run,
         )
         video_runtime = time.time() - start_time
 
@@ -439,7 +489,9 @@ def process_dataset_by_row_remotely(
             "Generations": output.response,
             "Reasoning": output.reasoning,
             "Logprobs": output.logprobs,
+            # "Forced_Choice_Logprobs": output.forced_choice_logprobs,
             "video_id": row["video_id"],
+            "strategy": model.input_strategy.__class__.__name__,
         }
 
         df = pd.DataFrame([row])
@@ -467,6 +519,7 @@ def process_dataset_by_row(
         output = model.process_video(
             video_path=video_path,
             meta_data=row.to_dict(),
+            forced_choice=args.forced_choice,
             transcript=row.get("transcript"),
             dataset_dir=args.dataset_dir,
             video_id=row["video_id"],
@@ -499,6 +552,7 @@ def process_dataset_by_row(
             "Processed_Video": video_path.name,
             "Generations": output.response,
             "video_id": row["video_id"],
+            "strategy": model.input_strategy.__class__.__name__,
         }
 
         df = pd.DataFrame([row])
@@ -524,7 +578,7 @@ def save_to_results_files(df: pd.DataFrame, tgt_file: Path) -> None:
 def batch_process_dataset(model: ModelInterface, posts_df: pd.DataFrame, tgt_file: str):
     assert isinstance(model, ModelvLLM_Benchmark), type(model)
     run_id = generate_run_uuid()
-    reqs: Iterable[LlmReq] = list(to_iterof_llmreqs(posts_df))
+    reqs: Iterable[LlmReq] = list(to_iterof_llmreqs(posts_df, args.input_strategy))
     gen = model.llmlib_model.complete_batchof_reqs(batch=reqs)
     for response in tqdm(gen, desc="Processing dataset", total=len(posts_df)):
         data = response | {"run_id": run_id, "timestamp": generate_timestamp()}

@@ -20,6 +20,7 @@ class Input(ABC):
         transcript: str | None = None,
         dataset_dir: Path | None = None,
         video_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict:
         pass
 
@@ -32,9 +33,14 @@ class OnlyVideo(Input):
         transcript: str | None = None,
         dataset_dir: Path | None = None,
         video_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict:
         prompt = fill_prompt(meta_data, read_prompt_template())
-        return {"messages": [Message(role="user", msg=prompt, video=video_path)]}
+        return {
+            "messages": [Message(role="user", msg=prompt, video=video_path)],
+            "strategy": "only_video",
+            "run_id": run_id,
+        }
 
 
 class TranscribedVideo(Input):
@@ -45,6 +51,7 @@ class TranscribedVideo(Input):
         transcript: str | None = None,
         dataset_dir: Path | None = None,
         video_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict:
         assert dataset_dir is not None, "dataset_dir must be provided to mute video"
         transcript = get_transcript(dataset_dir, video_id)
@@ -58,7 +65,11 @@ class TranscribedVideo(Input):
             f"{pretty_json}\n"
             "```\n"
         )
-        return {"messages": [Message(role="user", msg=prompt, video=video_path)]}
+        return {
+            "messages": [Message(role="user", msg=prompt, video=video_path)],
+            "strategy": "transcribed",
+            "run_id": run_id,
+        }
 
 
 class MutedVideo(Input):
@@ -69,6 +80,7 @@ class MutedVideo(Input):
         transcript: str | None = None,
         dataset_dir: Path | None = None,
         video_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict:
         assert dataset_dir is not None, "dataset_dir must be provided to mute video"
         transcript = get_transcript(dataset_dir, video_id)
@@ -84,7 +96,11 @@ class MutedVideo(Input):
         )
         muted_path = mute_video(dataset_dir, video_path)
         prompt = fill_prompt(meta_data, read_prompt_template())
-        return {"messages": [Message(role="user", msg=prompt, video=muted_path)]}
+        return {
+            "messages": [Message(role="user", msg=prompt, video=muted_path)],
+            "strategy": "muted",
+            "run_id": run_id,
+        }
 
 
 class MutedNoTranscriptVideo(Input):
@@ -95,11 +111,16 @@ class MutedNoTranscriptVideo(Input):
         transcript: str | None = None,
         dataset_dir: Path | None = None,
         video_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict:
         assert dataset_dir is not None, "dataset_dir must be provided to mute video"
         muted_path = mute_video(dataset_dir, video_path)
         prompt = fill_prompt(meta_data, read_prompt_template())
-        return {"messages": [Message(role="user", msg=prompt, video=muted_path)]}
+        return {
+            "messages": [Message(role="user", msg=prompt, video=muted_path)],
+            "strategy": "muted_no_transcript",
+            "run_id": run_id,
+        }
 
 
 @dataclass
@@ -107,6 +128,7 @@ class Output:
     response: str
     reasoning: str | None = None
     logprobs: dict | None = None
+    forced_choice_logprobs: dict | None = None
     post_id: str | None = None
 
 
