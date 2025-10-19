@@ -40,7 +40,9 @@ def assert_exists(path: Path) -> None:
 
 def saxony_dataset_dir() -> Path:
     dss_home = os.environ["DSS_HOME"]
-    return Path(dss_home) / "toxicainment" / "2025-02-07-saxony-labeled-data"
+    return (
+        Path(dss_home) / "toxicainment" / "dataset" / "2025-02-07-saxony-labeled-data"
+    )
 
 
 def get_posts_df(dataset_dir: Path) -> pd.DataFrame:
@@ -99,12 +101,16 @@ def to_convo(posts_df_row: dict) -> Conversation:
     return convo
 
 
-def to_iterof_llmreqs(posts_df: pd.DataFrame) -> Iterable[LlmReq]:
+def to_iterof_llmreqs(posts_df: pd.DataFrame, input_strategy: str) -> Iterable[LlmReq]:
     for _, row in posts_df.iterrows():
         row_dict = row.to_dict()
         yield LlmReq(
             convo=to_convo(row_dict),
-            metadata={"video_id": row_dict["video_id"]},
+            metadata={
+                "video_id": row_dict["video_id"],
+                "strategy": input_strategy,
+                "Processed_Video": Path(row_dict["video_path"]).name,
+            },
         )
 
 
