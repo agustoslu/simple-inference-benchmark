@@ -47,30 +47,35 @@ from llmlib.vllmserver import spinup_vllm_server
 
 logger = logging.getLogger(__name__)
 
+logging.getLogger("google.api_core").setLevel(logging.DEBUG)
+logging.getLogger("google.auth").setLevel(logging.DEBUG)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
+
 
 class BenchmarkArgs(BaseSettings, cli_parse_args=True):
     profile: bool = False
     model_id: str = "google/gemma-3-4b-it"
     n_examples: int = 2
-    use_vllm: bool = False
+    use_vllm: bool = True
     max_n_frames_per_video: int = 50
     output_token_limit: int = 5000
     compile: bool = False
-    restart: bool = False
+    restart: bool = False   
     dataset_dir: Path = saxony_dataset_dir()
     tgt_file: Path = "benchmark_responses.jsonl"
     input_strategy: str = "muted"
     forced_choice: bool = False
-
+    
+    # for vLLM
+    temperature: float | None = 0.0
     vllm_start_server: bool = False
     vllm_port: int = 8000
     vllm_remote_call_concurrency: int = 8
     vllm_allowed_local_media_path: str = "/home/"
     vllm_tensor_parallel_size: int = 1
 
-    run_id: str | None = (
-        None  # for gemini runs, create blobs with this run_id to prevent race conditions
-    )
+    # for Gemini API: create blobs with this run_id to prevent race conditions
+    run_id: str | None = None
 
 
 @dataclass
@@ -296,6 +301,7 @@ def load_vllm_model(args: BenchmarkArgs, input_strategy: Input) -> ModelvLLM_Ben
     llmlib_model = ModelvLLM(
         model_id=args.model_id,
         max_new_tokens=args.output_token_limit,
+        temperature=args.temperature,
         remote_call_concurrency=args.vllm_remote_call_concurrency,
         port=args.vllm_port,
         timeout_secs=300,
