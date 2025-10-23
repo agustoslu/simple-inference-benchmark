@@ -20,7 +20,6 @@ enroot create --name $CONTAINER_NAME /dss/dsshome1/02/ra79vom2/agustoslu+pytorch
 
 enroot start --rw --root \
     --mount /dss/dsshome1/02/ra79vom2/code:/workspace/code \
-    --mount /dss/dsshome1/02/ra79vom2/datasets:/workspace/datasets \
     --mount "$DSS_HOME:$DSS_HOME" \
     --env DSS_HOME=$DSS_HOME \
     --env HF_TOKEN=$HF_TOKEN \

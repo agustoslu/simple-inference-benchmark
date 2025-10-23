@@ -38,7 +38,6 @@ from llmlib.huggingface_inference import video_to_imgs
 from llmlib.gemma3_local import Gemma3Local
 from llmlib.vllm_model import ModelvLLM
 from llmlib.qwen2_5 import Qwen2_5
-from llmlib.qwen_2_5_omni import Qwen2_5_Omni
 from llmlib.llama_4 import Llama_4
 from llmlib.gemini.gemini_code import GeminiAPI
 from llmlib.base_llm import Message, LlmReq
@@ -138,7 +137,6 @@ class ModelvLLM_Benchmark(ModelInterface):
     llmlib_model: ModelvLLM
 
 
-
 @dataclass
 class Qwen(HuggingFaceModel):
     llmlib_model: Qwen2_5
@@ -172,22 +170,6 @@ class Qwen(HuggingFaceModel):
             output = self.llmlib_model.complete_msgs(
                 msgs=prepared["messages"], output_dict=True
             )
-        return Output(response=output["response"])
-
-
-@dataclass
-class Qwen_Omni(HuggingFaceModel):
-    llmlib_model: Qwen2_5_Omni
-
-    def process_video(
-        self, video_path: str | Path, meta_data: dict, **kwargs
-    ) -> Output:
-        prepared = self.input_strategy.prepare(
-            video_path=video_path, meta_data=meta_data, **kwargs
-        )
-        output = self.llmlib_model.complete_msgs(
-            msgs=prepared["messages"], output_dict=True
-        )
         return Output(response=output["response"])
 
 
@@ -248,9 +230,6 @@ def load_model(args: BenchmarkArgs, input_strategy: Input) -> ModelInterface:
 
     if "Qwen2.5-VL" in model_id:
         return load_qwen(args, input_strategy)
-
-    if "Qwen2.5-Omni" in model_id:
-        return load_qwen_omni(args, input_strategy)
 
     if "Llama" in model_id:
         return load_llama(args, input_strategy)
@@ -332,23 +311,6 @@ def load_qwen(args: BenchmarkArgs, input_strategy: Input) -> Qwen:
         forced_choice=args.forced_choice,
     )
     return qwen
-
-
-def load_qwen_omni(args: BenchmarkArgs, input_strategy: Input) -> Qwen_Omni:
-    llmlib_model = Qwen2_5_Omni(
-        model_id=args.model_id,
-        max_n_frames_per_video=args.max_n_frames_per_video,
-        max_new_tokens=args.output_token_limit,
-    )
-    qwen_omni = Qwen_Omni(
-        model_id=args.model_id,
-        model=llmlib_model.model,
-        tokenizer=llmlib_model.processor.tokenizer,
-        args=args,
-        llmlib_model=llmlib_model,
-        input_strategy=input_strategy,
-    )
-    return qwen_omni
 
 
 def load_llama(args: BenchmarkArgs, input_strategy: Input) -> Llama:
